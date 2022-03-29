@@ -17,6 +17,7 @@ library(tidyr)
 library(corrplot)
 library(OpenML)
 library(farff)
+library(rgdal)
 RNGversion("3.5.0")
 
 #Setting the seed such that this is fixed whenever the 
@@ -56,10 +57,14 @@ data <- data %>% mutate(region = cut(PC,breaks = PC_breaks, labels = c('1','2','
 #Adding the frequency 
 data <- data %>% mutate(freq = NClaims/Expo)
 
+data_cap <- data %>% mutate(Ageph = pmin(Ageph,88), BM = pmin(BM,18),
+                            Age_car = pmin(Age_car,25), Power = pmax(13,pmin(Power,125)))
+
 ############ First inspection of the data #################
 
 ############## 1. Age ################
 
+#Age ranges from 18 up to 95
 range(data$Ageph)
 
 #Plotting histogram in function of age policyholders for
@@ -134,14 +139,584 @@ expo_age <- ggplot(data %>% group_by(Ageph) %>% summarise(totalexpo = sum(Expo))
 expo_age
 
 
+################ 2. Coverage ##############
+
+#Most drivers have TPL coverage, about 60% of the policyholders. 
+summary(data$Coverage)
+95136/nrow(data)
+
+#Number of policies per coverage type. 
+number_policies_Coverage <- ggplot(data) + geom_bar(aes(x = Coverage), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Type of coverage', y = 'Number of policies') + ggtitle('Policies per coverage type')
+
+number_policies_Coverage
+
+#Total exposure per coverage type.
+#This again looks similar to histogram for number of policies.
+expo_coverage <- ggplot(data %>% group_by(Coverage) %>% summarise(totalexpo = sum(Expo)), aes(x = Coverage, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Type of coverage', y = 'Total exposure') + ggtitle('The total exposure per coverage type')
+
+expo_coverage
+
+#Number of claims per coverage type
+nclaims_coverage <- ggplot(data %>% group_by(Coverage) %>% summarise(totalclaims = sum(NClaims)), aes(x = Coverage, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Type of coverage', y = 'Total number of claims') + ggtitle('The total number of claims per coverage type')
+
+nclaims_coverage
+
+#Empirical frequency per coverage type. 
+#It is visible that the empirical frequency does not differ a lot between 
+#the different coverage types. Therefore, we would expect that this variable 
+#does not have a big impact on the frequency of an accident.
+freq_coverage <- ggplot(data %>% group_by(Coverage) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Coverage, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Type of coverage', y = 'Empirical frequency') + ggtitle('The empirical frequency per coverage type')
+
+freq_coverage
+
+#Empirical severity per coverage type. Clearly, we expect the severity 
+#to be slightly less for drivers with PO coverage.
+sev_coverage <- ggplot(data %>% group_by(Coverage) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Coverage, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Type of coverage', y = 'Empirical severity') + ggtitle('The empirical severity per coverage type')
+
+sev_coverage
+
+
+################# 3. Fuel #############
+#Most drivers use gasoline as fuel, about 69% of the policyholders.
+summary(data$Fuel)
+summary(data$Fuel)[2]/nrow(data)
+
+
+#Number of policies per fuel type. 
+number_policies_fuel <- ggplot(data) + geom_bar(aes(x = Fuel), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Type of fuel', y = 'Number of policies') + ggtitle('Policies per fuel type')
+
+number_policies_fuel
+
+#Total exposure per fuel type.
+#This again looks similar to histogram for number of policies.
+expo_fuel <- ggplot(data %>% group_by(Fuel) %>% summarise(totalexpo = sum(Expo)), aes(x = Fuel, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Type of fuel', y = 'Total exposure') + ggtitle('The total exposure per fuel type')
+
+expo_fuel
+
+#Number of claims per fuel type
+nclaims_fuel <- ggplot(data %>% group_by(Fuel) %>% summarise(totalclaims = sum(NClaims)), aes(x = Fuel, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Type of fuel', y = 'Total number of claims') + ggtitle('The total number of claims per fuel type')
+
+nclaims_fuel
+
+#Empirical frequency per fuel type. 
+#The empirical frequency is higher for diesel than for gasoline users. 
+freq_fuel <- ggplot(data %>% group_by(Fuel) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Fuel, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Type of fuel', y = 'Empirical frequency') + ggtitle('The empirical frequency per fuel type')
+
+freq_fuel
+
+#Empirical severity per fuel type. 
+#Whilst the empirical frequency is higher for diesel than for gasoline motors, 
+#it is visible that the empirical severity is higher for gasoline users. 
+sev_fuel <- ggplot(data %>% group_by(Fuel) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Fuel, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Type of fuel', y = 'Empirical severity') + ggtitle('The empirical severity per fuel type')
+
+sev_fuel
+
+#In general we expect diesel users to have more accidents at a lower cost
+#whilst gasoline users have less accidents, but these will on average, come at a higher cost.
+
+################# 4. Use ######################
+#Most drivers use the car for private use, about 95% of the policyholders. 
+summary(data$Use)
+summary(data$Use)[1]/nrow(data)
+
+#Number of policies per usage type. 
+number_policies_use <- ggplot(data) + geom_bar(aes(x = Use), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Use of car', y = 'Number of policies') + ggtitle('Policies per usage')
+
+number_policies_use
+
+#Total exposure per usage type.
+#This again looks similar to histogram for number of policies.
+expo_use <- ggplot(data %>% group_by(Use) %>% summarise(totalexpo = sum(Expo)), aes(x = Use, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Use of car', y = 'Total exposure') + ggtitle('The total exposure per usage')
+
+expo_use
+
+#Number of claims per usage type. 
+#We observe more claims for private use than for work use. 
+#Of course, this is intuitive since we also have more policies for these policyholders 
+#Therefore, observing frequency would give us a more comparable approach, 
+#since this offers us a relative view.
+nclaims_use <- ggplot(data %>% group_by(Use) %>% summarise(totalclaims = sum(NClaims)), aes(x = Use, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Use of car', y = 'Total number of claims') + ggtitle('The total number of claims per usage')
+
+nclaims_use
+
+#Empirical frequency per usage type. 
+#It is visible that the empirical frequency does not differ a lot between 
+#the different usage types. Therefore, we expect that this variable 
+#does not have a big impact on the frequency of an accident.
+freq_use <- ggplot(data %>% group_by(Use) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Use, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Use of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per usage')
+
+freq_use
+
+#Empirical severity per usage type. We expect the severity for policyholders 
+#using their car for private reasons to be slightly more than for work use. 
+#It is visible that the severity does not differ drastically between the two 
+#usage types. 
+sev_use <- ggplot(data %>% group_by(Use) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Use, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Use of car', y = 'Empirical severity') + ggtitle('The empirical severity per usage')
+
+sev_use
+
+#We expect the use of the car to not have a big impact on both the 
+#frequency as well as severity of the claims.
+
+
+################### 5. Fleet ##################
+#Most drivers do not have a fleet insurance, about 96.8% of the policyholders. 
+summary(data$Fleet)
+summary(data$Fleet)[1]/nrow(data)
+
+#Number of policies for fleet. 
+number_policies_fleet <- ggplot(data) + geom_bar(aes(x = Fleet), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Fleet', y = 'Number of policies') + ggtitle('Policies for fleet')
+
+number_policies_fleet
+
+#Total exposure for fleet.
+#This again looks similar to histogram for number of policies.
+expo_fleet <- ggplot(data %>% group_by(Fleet) %>% summarise(totalexpo = sum(Expo)), aes(x = Fleet, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Fleet', y = 'Total exposure') + ggtitle('The total exposure for fleet')
+
+expo_fleet
+
+#Number of claims for fleet. Obviously, since most policies do not cover 
+#for a fleet also most claims will occur for the policyholders that 
+#are not part of a fleet.
+nclaims_fleet <- ggplot(data %>% group_by(Fleet) %>% summarise(totalclaims = sum(NClaims)), aes(x = Fleet, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Fleet', y = 'Total number of claims') + ggtitle('The total number of claims for fleet')
+
+nclaims_fleet
+
+#Empirical frequency for fleet. 
+#It is visible that the empirical frequency is a bit higher for 
+#drivers who do not hold a fleet insurance. The difference 
+#between the empirical frequency of drivers that are part of a fleet 
+#and the ones who are not, is not significant.
+
+freq_fleet <- ggplot(data %>% group_by(Fleet) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Fleet, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Fleet', y = 'Empirical frequency') + ggtitle('The empirical frequency for fleet')
+
+freq_fleet
+
+#Empirical severity for fleet. We expect that the severity will be higher 
+#for drivers who do not have a fleet insurance than for the ones 
+#who do have this.
+sev_fleet <- ggplot(data %>% group_by(Fleet) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Fleet, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Fleet', y = 'Empirical severity') + ggtitle('The empirical severity for fleet')
+
+sev_fleet
+
+#We expect policyholders who do not hold a fleet insurance to have 
+#more frequent accidents and more severe accidents.
+
+################ 6. Sex ####################
+#Most policyholders are male, about 73.5% of the policyholders. 
+summary(data$Sex)
+summary(data$Sex)[2]/nrow(data)
+
+#Number of policies per sex. 
+number_policies_sex <- ggplot(data) + geom_bar(aes(x = Sex), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Sex', y = 'Number of policies') + ggtitle('Policies per sex')
+
+number_policies_sex
+
+#Total exposure per sex.
+#This again looks similar to histogram for number of policies.
+expo_sex <- ggplot(data %>% group_by(Sex) %>% summarise(totalexpo = sum(Expo)), aes(x = Sex, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Sex', y = 'Total exposure') + ggtitle('The total exposure per sex')
+
+expo_sex
+
+#Number of claims per sex. Again, the number of claims for males is larger 
+#than the number of claims for females as is also the case for the number 
+#of policies.
+nclaims_sex <- ggplot(data %>% group_by(Sex) %>% summarise(totalclaims = sum(NClaims)), aes(x = Sex, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Sex', y = 'Total number of claims') + ggtitle('The total number of claims per sex')
+
+nclaims_sex
+
+#Empirical frequency per sex. 
+#It is visible that the empirical frequency does not differ a lot between 
+#the different sexes. Therefore, we expect that the sex does not have 
+#a significant impact on the frequency of car accidents.
+freq_sex <- ggplot(data %>% group_by(Sex) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Sex, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Sex', y = 'Empirical frequency') + ggtitle('The empirical frequency per sex')
+
+freq_sex
+
+#Empirical severity per sex. The empirical severity for females 
+#is slightly higher than for males. It is visible that the difference 
+#between them is not significant. Therefore, we expect that the 
+#sex of a driver does not have a large impact on the severity of an accident.
+sev_sex <- ggplot(data %>% group_by(Sex) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Sex, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Sex', y = 'Empirical severity') + ggtitle('The empirical severity per sex')
+
+sev_sex
+
+################ 7. Bonus Malus ############
+#The Bonus-malus level ranges from 0 to 22. 
+range(data$BM)
+
+#We will right-censor the bonus-malus level at 18. 
+#The reason for this is explained in the analysis of the severity. 
+data_cap <- data %>% mutate(BM = pmin(BM,18))
+
+#Number of policies per bonus malus level.
+#Clearly, there are a lot of policies with bonus-malus level equal to zero. 
+#Further, we observe very few policies with a bonus-malus level higher than 15.
+#This is rather good news for an insurance company since the portfolio 
+#contains a lot of very good drivers.
+number_policies_BM <- ggplot(data) + geom_bar(aes(x = BM), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Bonus-malus level', y = 'Number of policies') + ggtitle('Policies per bonus-malus level')
+
+sum(data$BM > 15)/nrow(data)
+number_policies_BM
+
+#Total exposure per bonus malus level.
+#This again looks similar to histogram for number of policies.
+expo_BM <- ggplot(data %>% group_by(BM) %>% summarise(totalexpo = sum(Expo)), aes(x = BM, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Bonus-malus level', y = 'Total exposure') + ggtitle('The total exposure per bonus-malus level')
+
+expo_BM
+expo_BM_list <- data %>% group_by(BM) %>% summarise(totalexpo = sum(Expo))
+
+#Number of claims per bonus malus level
+nclaims_BM <- ggplot(data %>% group_by(BM) %>% summarise(totalclaims = sum(NClaims)), aes(x = BM, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Bonus-malus level', y = 'Total number of claims') + ggtitle('The total number of claims per bonus-malus level')
+
+nclaims_BM
+
+#Empirical frequency per bonus malus level. 
+#It is clear that the frequency is increasing as the bonus-malus level increases, 
+#which is intuitive since a higher BM level indicates a rather bad driver.
+#Consequentially, the frequency will be higher for these drivers. 
+#The observations for the frequency histogram corresponding to the 
+#censored data remain similar.
+
+freq_BM <- ggplot(data %>% group_by(BM) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = BM, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Bonus-malus level', y = 'Empirical frequency') + ggtitle('The empirical frequency per bonus-malus level')
+
+freq_BM_cap <- ggplot(data_cap %>% group_by(BM) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = BM, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Bonus-malus level', y = 'Empirical frequency') + ggtitle('The empirical frequency per bonus-malus level - censored')
+
+grid.arrange(freq_BM, freq_BM_cap, ncol = 2)
+
+#Empirical severity per bonus-malus level. Clearly, for drivers with 
+#bonus malus level equal to 22 the empirical severity is extremely high.
+#It is clear that we only have 32 policies for this BM level. 
+#Analysing these drivers, it is clear that there is one driver with 
+#a claim amount of 407477 resulting into an extremely high severity 
+#for this group of drivers. To not distort the data analysis by 
+#this one extreme observation, we right-censored the data for BM at 18.
+
+
+sev_BM <- ggplot(data %>% group_by(BM) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = BM, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Bonus-malus level', y = 'Empirical severity') + ggtitle('The empirical severity per bonus-malus level')
+
+sev_BM_cap <- ggplot(data_cap %>% group_by(BM) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = BM, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Bonus-malus level', y = 'Empirical severity') + ggtitle('The empirical severity per bonus-malus level - censored')
+
+sum(data$BM == 22)
+ 
+
+grid.arrange(sev_BM, sev_BM_cap, ncol = 2)
+
+########## 8. Age car ###############
+range(data$Age_car)
+summary(data$Age_car)
+
+data_cap <- data_cap %>% mutate(Age_car = pmin(Age_car,25))
+
+#Number of policies per car age. 
+#Very few policies for cars that are older than 20 years, only 766. 
+#This attributes to approx. 0.4% of the total number of policies.
+#Policies for cars older than 25 years = 281, only 0.17% of the total 
+#number of policies available.
+number_policies_AgeCar <- ggplot(data) + geom_bar(aes(x = Age_car), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Age of car', y = 'Number of policies') + ggtitle('Policies per car age')
+
+number_policies_AgeCar
+
+number_policies_AgeCar_datcap <- ggplot(data_cap) + geom_bar(aes(x = Age_car), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Age of car', y = 'Number of policies') + ggtitle('Policies per car age - censored')
+
+number_policies_AgeCar_datcap
+sum(data$Age_car == 0)
+sum(data$Age_car > 25)
+sum(data$Age_car > 25)/nrow(data)
+
+#Total exposure per car age.
+#This again looks similar to histogram for number of policies.
+expo_AgeCar <- ggplot(data %>% group_by(Age_car) %>% summarise(totalexpo = sum(Expo)), aes(x = Age_car, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Age of car', y = 'Total exposure') + ggtitle('The total exposure per car age')
+
+expo_AgeCar
+
+
+
+#Number of claims per car age
+nclaims_AgeCar <- ggplot(data %>% group_by(Age_car) %>% summarise(totalclaims = sum(NClaims)), aes(x = Age_car, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Age of car', y = 'Total number of claims') + ggtitle('The total number of claims per car age')
+
+nclaims_AgeCar
+
+#Empirical frequency per car age. Observing the empirical frequency, we would 
+#expect that for cars older than 32 there are no accidents. 
+#For the cars aged 37 we observed one claim, resulting in a frequency. 
+#Since we do not have a lot of observations for cars older than 25 
+#we will right-censor the data at this point to avoid distortion of 
+#the analysis 
+freq_AgeCar <- ggplot(data %>% group_by(Age_car) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Age_car, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Age of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per car age')
+
+freq_AgeCar
+
+freq_AgeCar_col <- data %>% group_by(Age_car) %>% summarize(Freq = sum(NClaims) / sum(Expo))
+
+data %>% filter(Age_car == 37)
+sum(data$Age_car == 37)
+
+sum(data$Age_car > 25)
+
+freq_AgeCar_cap <- ggplot(data_cap %>% group_by(Age_car) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Age_car, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Age of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per car age - censored')
+
+freq_AgeCar_cap
+#Observing the frequency we do not expect the age of the car to have a 
+#big impact on the frequency since this seems to be rather equal across 
+#the different ages. We note that for new cars (0-1 years old), we expect the frequency 
+#to be a little bit higher than for older cars.
+
+#Empirical severity per car age. Clearly, looking at the uncensored data 
+#we observe an enormous peak for car age = 37. To not distort the data 
+#we already put a cap on the data at car age = 25. 
+sev_AgeCar <- ggplot(data %>% group_by(Age_car) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Age_car, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Age of car', y = 'Empirical severity') + ggtitle('The empirical severity per car age')
+
+sev_AgeCar
+
+sev_AgeCar_cap <- ggplot(data_cap %>% group_by(Age_car) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Age_car, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Age of car', y = 'Empirical severity') + ggtitle('The empirical severity per car age - censored')
+
+sev_AgeCar_cap
+
+#The severity seems to vary across the different ages with no significant
+#outliers for the censored data. 
+
+################# 9. Power #####################
+#It is clear that the data is right-skewed when observing this in function 
+#of the power of the car.
+summary(data$Power)
+
+data_cap <- data_cap %>% mutate(Power =pmax(13, pmin(Power,125)))
+
+#Number of policies per power. 
+number_policies_Power <- ggplot(data) + geom_bar(aes(x = Power), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Power of car', y = 'Number of policies') + ggtitle('Policies per power')
+
+number_policies_Power
+sum(data$Power > 125)
+
+#Total exposure per power.
+#This again looks similar to histogram for number of policies.
+expo_Power <- ggplot(data %>% group_by(Power) %>% summarise(totalexpo = sum(Expo)), aes(x = Power, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Power of car', y = 'Total exposure') + ggtitle('The total exposure per power')
+
+expo_Power
+
+#Number of claims per power.
+nclaims_Power <- ggplot(data %>% group_by(Power) %>% summarise(totalclaims = sum(NClaims)), aes(x = Power, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Power of car', y = 'Total number of claims') + ggtitle('The total number of claims per power')
+
+nclaims_Power
+
+#Empirical frequency per power. 
+#It is visible that the frequency remains stable up to power = 150. 
+#From this point on, the empirical frequency is significantly higher 
+#than for cars with lower power. This seems intuitive since cars with 
+#higher power will probably go faster and we would expect these drivers 
+#to have a more agessive driving style. Thus resulting into more accidents.
+#For cars with power = 152 we observe an enormous peak. Resulting from 
+#a driver filing 3 accidents with a very short exposure. 
+#To avoid distortion of the analysis by this one observation, we will 
+#right-censor the data at Power = 125.
+
+#Furthermore, we note that there is only one policyholder with power = 10 
+#resulting in a rather high frequency. To avoid distortion, we 
+#left-censor the data at power = 13. 
+freq_Power <- ggplot(data %>% group_by(Power) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Power, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Power of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per power')
+
+freq_Power
+
+data %>% filter(Power == 152)
+
+data_power_count <- data %>% group_by(Power) %>% summarise(n = n())
+sum(data$Power > 125)/nrow(data)
+
+freq_Power_cap <- ggplot(data_cap %>% group_by(Power) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Power, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Power of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per power - censored')
+
+freq_Power_cap
+
+#For the censored data we observe an increasing trend in frequency in function 
+#of the power of the car, which is intuitive. 
+
+#Empirical severity per power. We observe a number of peaks. For observations 
+#with power > 125 there is only one peak. By right censoring the data 
+#this peak is not visible anymore, since there are also very small 
+#severity amounts for claims with power > 125.
+sev_Power <- ggplot(data %>% group_by(Power) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Power, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Power of car', y = 'Empirical severity') + ggtitle('The empirical severity per power')
+
+sev_Power
+
+sev_Power_cap <- ggplot(data_cap %>% group_by(Power) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Power, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Power of car', y = 'Empirical severity') + ggtitle('The empirical severity per power - censored')
+
+sev_Power_cap
+
+sev_Power_column <- data_cap %>% group_by(Power) %>% summarise(sev = sum(Claim)/sum(NClaims)) 
+
+power63 <- data_cap %>% filter(Power == 63)
+power115 <- data_cap %>% filter(Power == 115) 
+
+which.max(power63$Claim)
+#Observing the claim amount of the policyholders with power 115 it is clear that 
+#there is one driver with a claim amount of 200754, resulting in the 
+#very large peak. Analysing the policyholder with power = 63, there is 
+#one claim of claim amount 1.000.000 attributing to this peak. 
+
+############### 10. Region #####################
+#There does not seem to be a significant difference in the number of 
+#policyholders per region. 
+summary(data$region)
+
+#Number of policies per region. The number of policies seems to be 
+#uniformly distributed across the Belgian regions with the small exception 
+#of Namen. For this region there seems to be less policies compared to
+#the other regions.
+number_policies_Region<- ggplot(data) + geom_bar(aes(x = region), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Region', y = 'Number of policies') + ggtitle('Policies per region')
+
+number_policies_Region
+
+#Total exposure per region.
+#This again looks similar to histogram for number of policies.
+expo_Region <- ggplot(data %>% group_by(region) %>% summarise(totalexpo = sum(Expo)), aes(x = region, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Region', y = 'Total exposure') + ggtitle('The total exposure per region')
+
+expo_Region
+
+#Number of claims per region
+nclaims_Region <- ggplot(data %>% group_by(region) %>% summarise(totalclaims = sum(NClaims)), aes(x = region, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Region', y = 'Total number of claims') + ggtitle('The total number of claims per region')
+
+nclaims_Region
+
+#Empirical frequency per region. There are no significant differences in 
+#the empirical frequency between the region. The amounts seem to be 
+#more or less equal. We note that we expect the frequency of accidents 
+#around Brussels to be a little higher compared to the other regions. 
+freq_Region <- ggplot(data %>% group_by(region) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = region, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Region', y = 'Empirical frequency') + ggtitle('The empirical frequency per region')
+
+freq_Region
+
+#Empirical severity per region. The empirical severity does not seem 
+#to differ a lot across the different regions. 
+sev_Region <- ggplot(data %>% group_by(region) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = region, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Region', y = 'Empirical severity') + ggtitle('The empirical severity per region')
+
+sev_Region
+
+#Conclusion: We expect the region to not have a big impact on the 
+#severity and frequency of the policyholders. 
+
+################# 11. Spatial view ######################
+#This function can be used to read in the shape file of belgium
+readShapefile = function(){
+  belgium_shape <- readOGR(dsn = path.expand("./shape file Belgie postcodes"), 
+                           layer = "npc96_region_Project1")
+  belgium_shape <- spTransform(belgium_shape, CRS("+proj=longlat +datum=WGS84"))
+  belgium_shape$id <- row.names(belgium_shape)
+  return(belgium_shape)
+}
+
+##### (i) Frequency 
+freq_per_postal_code <- data %>% group_by(PC) %>% summarize(freq = sum(NClaims) / sum(Expo))
+belgium_shape = readShapefile()
+belgium_shape@data <- left_join(belgium_shape@data,freq_per_postal_code, by = c('POSTCODE' = 'PC'))
+
+#We divide the empirical frequency across the municipalities in Belgium 
+#in three bins: low, average and high.
+belgium_shape@data$freq_class <- cut(belgium_shape@data$freq, breaks = quantile(belgium_shape@data$freq, 
+                                                                                c(0,0.2,0.8,1),na.rm = TRUE),right = FALSE, include.lowest = TRUE, labels = c('low','average','high'))
+#Mapping the Belgium with the empirical frequencies 
+belgium_shape_f <- fortify(belgium_shape)
+belgium_shape_f <- left_join(belgium_shape_f,belgium_shape@data)
+plot.eda.map <- ggplot(belgium_shape_f, aes(long,lat, group = group)) +
+  geom_polygon(aes(fill = belgium_shape_f$freq_class), colour = 'black', size = 0.1)
+plot.eda.map <- plot.eda.map + theme_bw() + labs( fill = 'Empirical\nfrequency') + scale_fill_brewer(palette = 'Blues', na.value = 'White')
+plot.eda.map 
+
+####### (ii) Severity 
+sev_per_postal_code <- data %>% group_by(PC) %>% summarize(sev = sum(Claim) / sum(NClaims))
+belgium_shape = readShapefile()
+belgium_shape@data <- left_join(belgium_shape@data,sev_per_postal_code, by = c('POSTCODE' = 'PC'))
+
+#We divide the empirical frequency across the municipalities in Belgium 
+#in three bins: low, average and high.
+belgium_shape@data$sev_class <- cut(belgium_shape@data$sev, breaks = quantile(belgium_shape@data$sev, 
+                                                                                c(0,0.2,0.8,1),na.rm = TRUE),right = FALSE, include.lowest = TRUE, labels = c('low','average','high'))
+#Mapping the Belgium with the empirical frequencies 
+belgium_shape_f <- fortify(belgium_shape)
+belgium_shape_f <- left_join(belgium_shape_f,belgium_shape@data)
+plot.eda.map <- ggplot(belgium_shape_f, aes(long,lat, group = group)) +
+  geom_polygon(aes(fill = belgium_shape_f$sev_class), colour = 'black', size = 0.1)
+plot.eda.map <- plot.eda.map + theme_bw() + labs( fill = 'Empirical\nseverity') + scale_fill_brewer(palette = 'Blues', na.value = 'White')
+plot.eda.map 
+
 ########### General plots ##############
+summary(data$NClaims)
 hist_nclaims <- ggplot(data) + geom_bar(aes(x = NClaims), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
-  labs(x = 'number of claims', y = 'number of policies') + ggtitle('Policies per number of claims')
+  labs(x = 'Number of claims', y = 'Number of policies') + ggtitle('Policies per number of claims')
 
 hist_nclaims
+
+expo_nclaims <- ggplot(data %>% group_by(NClaims) %>% summarise(totalexpo = sum(Expo)), aes(x = NClaims, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Number of claims', y = 'Total exposure') + ggtitle('The total exposure per number of claims')
+
+expo_nclaims
+
+#The number of claims ranges from 0 up to 5. As expected, most policyholders
+#have zero claims with exposure and number of policies decreasing in function 
+#of the number of claims. 
+
+nclaims_table <- data %>% group_by(NClaims) %>% summarise(totalexposure = sum(Expo), n = n())
 
 hist_expo <- ggplot(data) + geom_bar(aes(x = Expo), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
   labs(x = 'Exposure', y = 'number of policies') + ggtitle('Policies per exposure')
 hist_expo
 
-data %>% group_by(Expo) %>% summarize()
+#As expected most policies have an exposure of 1. 
+
+#Standardize the data 
+#Split in training and testing data 
+#Correlation study 
+#Density plots 
+
+

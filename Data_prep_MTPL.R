@@ -54,6 +54,11 @@ PC_breaks <- c(1000,2000,3000,4000,5000,6000,7000,8000,9000,10000)
 
 data <- data %>% mutate(region = cut(PC,breaks = PC_breaks, labels = c('1','2','3','4','5','6','7','8','9'),right = FALSE))
 
+#Adding new variable binning the exposure to simplify the plots. 
+Expo_breaks <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+
+data <- data %>% mutate(Expo_bin = cut(Expo,breaks = Expo_breaks))
+                                
 #Adding the frequency 
 data <- data %>% mutate(freq = NClaims/Expo)
 
@@ -656,7 +661,25 @@ readShapefile = function(){
   return(belgium_shape)
 }
 
-##### (i) Frequency 
+##### (i) Exposure 
+expo_per_postal_code <- data %>% group_by(PC) %>% summarize(totalexpo = sum(Expo))
+range(expo_per_postal_code$totalexpo)
+belgium_shape = readShapefile()
+belgium_shape@data <- left_join(belgium_shape@data,expo_per_postal_code, by = c('POSTCODE' = 'PC'))
+
+#We divide the empirical frequency across the municipalities in Belgium 
+#in three bins: low, average and high.
+belgium_shape@data$expo_class <- cut(belgium_shape@data$totalexpo, breaks = quantile(belgium_shape@data$totalexpo, 
+                                                                                c(0,0.2,0.8,1),na.rm = TRUE),right = FALSE, include.lowest = TRUE)
+#Mapping the Belgium with the empirical frequencies 
+belgium_shape_f <- fortify(belgium_shape)
+belgium_shape_f <- left_join(belgium_shape_f,belgium_shape@data)
+plot.eda.map <- ggplot(belgium_shape_f, aes(long,lat, group = group)) +
+  geom_polygon(aes(fill = belgium_shape_f$expo_class), colour = 'black', size = 0.1)
+plot.eda.map <- plot.eda.map + theme_bw() + labs( fill = 'Exposure') + scale_fill_brewer(palette = 'Blues', na.value = 'White')
+plot.eda.map
+
+##### (ii) Frequency 
 freq_per_postal_code <- data %>% group_by(PC) %>% summarize(freq = sum(NClaims) / sum(Expo))
 belgium_shape = readShapefile()
 belgium_shape@data <- left_join(belgium_shape@data,freq_per_postal_code, by = c('POSTCODE' = 'PC'))
@@ -673,7 +696,7 @@ plot.eda.map <- ggplot(belgium_shape_f, aes(long,lat, group = group)) +
 plot.eda.map <- plot.eda.map + theme_bw() + labs( fill = 'Empirical\nfrequency') + scale_fill_brewer(palette = 'Blues', na.value = 'White')
 plot.eda.map 
 
-####### (ii) Severity 
+####### (iii) Severity 
 sev_per_postal_code <- data %>% group_by(PC) %>% summarize(sev = sum(Claim) / sum(NClaims))
 belgium_shape = readShapefile()
 belgium_shape@data <- left_join(belgium_shape@data,sev_per_postal_code, by = c('POSTCODE' = 'PC'))
@@ -690,7 +713,7 @@ plot.eda.map <- ggplot(belgium_shape_f, aes(long,lat, group = group)) +
 plot.eda.map <- plot.eda.map + theme_bw() + labs( fill = 'Empirical\nseverity') + scale_fill_brewer(palette = 'Blues', na.value = 'White')
 plot.eda.map 
 
-########### General plots ##############
+########### 12. General plots ##############
 summary(data$NClaims)
 hist_nclaims <- ggplot(data) + geom_bar(aes(x = NClaims), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
   labs(x = 'Number of claims', y = 'Number of policies') + ggtitle('Policies per number of claims')
@@ -701,6 +724,7 @@ expo_nclaims <- ggplot(data %>% group_by(NClaims) %>% summarise(totalexpo = sum(
   labs(x = 'Number of claims', y = 'Total exposure') + ggtitle('The total exposure per number of claims')
 
 expo_nclaims
+range(data_cap$Expo)
 
 #The number of claims ranges from 0 up to 5. As expected, most policyholders
 #have zero claims with exposure and number of policies decreasing in function 
@@ -712,11 +736,133 @@ hist_expo <- ggplot(data) + geom_bar(aes(x = Expo), color = KULbg, fill = "blue"
   labs(x = 'Exposure', y = 'number of policies') + ggtitle('Policies per exposure')
 hist_expo
 
-#As expected most policies have an exposure of 1. 
+hist_expo_bin <- ggplot(data) + geom_bar(aes(x = Expo_bin), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Binned exposure', y = 'number of policies') + ggtitle('Policies per exposure - binned')
+hist_expo_bin
 
-#Standardize the data 
-#Split in training and testing data 
-#Correlation study 
-#Density plots 
+#As expected most policies have an exposure of 1. Looking at the 
+#histogram for the binned exposures, the number of policies seems to be 
+#equal for the other bins. 
+
+summary(data$Claim)
+summary(data$Avg_Claim)
+
+#The claim amounts range from 0 up to 1.989.567,9
+#The average claim amounts have the same range. We conclude that 
+#this very big claim thus resulted out of 1 claim made by a policyholder.
+
+data_claims <- data %>% filter(Claim > 0)
+summary(data_claims$Claim)
+min(data_claims$Claim)
+
+data_claims <- data_claims %>% arrange(Claim)
+data_claims <- data_claims %>% mutate(Id=1:nrow(data_claims))
+
+#Conditioned upon observing a claim. 
+#Observing the policies resulting in a claim, it is clear that they also 
+#have a very wide range from 0.025 up to 1.989.567,9.
+#It is clear that this data is right skewed in function of the claims.
+
+p1 <- ggplot(data_claims, aes(x = log(Claim))) + geom_density(colour = "blue") +
+  labs(title = "Empirical density of log(claim amounts)", x = "claim amounts", y = "empirical density")
+
+p2 <- ggplot(data_claims, aes(x = Claim^(1/3))) + geom_density(colour = "blue") +
+  labs(title = "Empirical density of claim amounts^(1/3)", x = "claim amounts", y = "empirical density")
+
+grid.arrange(p1, p2, ncol = 2)
+
+p1_avgclaim <- ggplot(data_claims, aes(x = log(Avg_Claim))) + geom_density(colour = "blue") +
+  labs(title = "Empirical density of log(average claim amounts)", x = "average claim amounts", y = "empirical density")
+
+p2_avgclaim <- ggplot(data_claims, aes(x = Avg_Claim^(1/3))) + geom_density(colour = "blue") +
+  labs(title = "Empirical density of average claim amounts^(1/3)", x = "average claim amounts", y = "empirical density")
+
+grid.arrange(p1_avgclaim, p2_avgclaim, p1,p2, ncol = 2)
+
+ggplot(data_claims, aes( y =Claim^(1/3))) +        
+  geom_boxplot() + labs(y = 'claim amounts^(1/3)', title = 'Boxplot claim amounts')
+
+#Observing the density plots, it is clear that the claim amounts are indeed 
+#right skewed. We also observe some peaks in the transformed density plots. 
+#We observe two large peaks in the cube root transformation of the claims. 
+#It is clear that most claims that are filed are not very big, since 
+#the third quantile is 1443.9. Clearly, this will result in a lot of outliers
+#for the data. 
+
+############## Standardization of the data ##################
+
+summary(data_cap)
+data_cap <- data_cap %>% mutate(
+ AgephNN = scale_no_attr(Ageph),
+ FuelNN = as.integer(Fuel), 
+ FuelNN = scale_no_attr(FuelNN), 
+ UseNN = as.integer(Use), 
+ UseNN = scale_no_attr(UseNN),
+ FleetNN = as.integer(Fleet),
+ FleetNN = scale_no_attr(FleetNN), 
+ SexNN = as.integer(Sex), 
+ SexNN = scale_no_attr(SexNN),
+ BMNN = scale_no_attr(BM), 
+ Age_carNN = scale_no_attr(Age_car), 
+ PowerNN = scale_no_attr(Power)
+ )
+
+
+#One-hot encoding for the categorical variables with more 
+#than 2 levels. In this setting, coverage and region are the only categorical 
+#variables with respectively 3 and 9 levels.
+#To model coverage we add 3 columns to the dataset. For region we add 9. 
+
+data_cap <- data_cap %>% preprocess_cat_onehot("Coverage", "Coverage")
+data_cap <- data_cap %>% preprocess_cat_onehot("region","region")
+
+str(data_cap)
+
+#Two columns are added to the dataset. 
+#RandNN contains standard normally distributed random numbers
+#RandUN contains random numbers generated from a uniform distribution 
+#on the interval from - sqrt3 to sqrt3. 
+#Both vectors are normalized
+
+set.seed(seed)
+
+data_cap <- data_cap %>% mutate(
+  RandNN = rnorm(nrow(data_cap)),
+  RandNN = scale_no_attr(RandNN),
+  RandUN = runif(nrow(data_cap), min = -sqrt(3), max = sqrt(3)),
+  RandUN = scale_no_attr(RandUN)
+)
+
+################## Correlation study ###############
+
+sel_col <- c("Ageph","BM","Age_car","Power","Sex","Coverage","Fuel","Use","Fleet","region")
+
+dat_tmp <- data_cap[, sel_col]
+dat_tmp <- dat_tmp %>% mutate(Sex = as.integer(Sex), Coverage = as.integer(Coverage),
+                              Fuel = as.integer(Fuel), Use = as.integer(Use), Fleet = as.integer(Fleet), 
+                              region = as.integer(region))
+
+
+corrMat_Pearson <- round(cor(dat_tmp, method = "pearson"), 2)
+corrplot(corrMat_Pearson, method = "color")
+
+#Bonus malus and age of driver are negatively correlated, which is intuitive. 
+#As the age of the policyholder increases, the bonus malus decreases pointing 
+#to a good driver. This observation is indeed logical. Positive correlation 
+#between age of the car and the coverage, which again is intuitive. 
+#Indeed, we would expect younger cars to have a full coverage whilst 
+#older cars have a less extensive insurance such as TPL.
+
+
+corrMat_Spearman <- round(cor(dat_tmp, method = "spearman"), 2)
+
+corrplot(corrMat_Spearman ,method = "color")
+
+#Very little correlation between the other variables. 
+
+############# Training and testing data ############
+
+
+
 
 

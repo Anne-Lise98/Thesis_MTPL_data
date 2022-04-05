@@ -18,6 +18,7 @@ library(corrplot)
 library(OpenML)
 library(farff)
 library(rgdal)
+library(splitTools)
 RNGversion("3.5.0")
 
 #Setting the seed such that this is fixed whenever the 
@@ -64,6 +65,9 @@ data <- data %>% mutate(freq = NClaims/Expo)
 
 data_cap <- data %>% mutate(Ageph = pmin(Ageph,88), BM = pmin(BM,18),
                             Age_car = pmin(Age_car,25), Power = pmax(13,pmin(Power,125)))
+
+data_cap <- data_cap %>% arrange(desc(Avg_Claim))
+data_cap <- data_cap %>% mutate(Id=1:nrow(data_cap))
 
 ############ First inspection of the data #################
 
@@ -785,6 +789,7 @@ ggplot(data_claims, aes( y =Claim^(1/3))) +
 #Observing the density plots, it is clear that the claim amounts are indeed 
 #right skewed. We also observe some peaks in the transformed density plots. 
 #We observe two large peaks in the cube root transformation of the claims. 
+#Clearly, this is bimodal distributed. 
 #It is clear that most claims that are filed are not very big, since 
 #the third quantile is 1443.9. Clearly, this will result in a lot of outliers
 #for the data. 
@@ -861,6 +866,51 @@ corrplot(corrMat_Spearman ,method = "color")
 #Very little correlation between the other variables. 
 
 ############# Training and testing data ############
+#METHOD 1: Straight-forward, looking at frequency only
+
+ind <- partition(y = data_cap[["NClaims"]], p = c(train = 0.8, test = 0.2), seed = seed)
+learn2 <- data_cap[ind$train,]
+test2 <- data_cap[ind$test,]
+range(learn2$NClaims)
+range(test2$NClaims)
+
+#METHOD 2: Taking into account the claim sizes 
+#Takes a sample out of the numbers 1 up to 5 of size 32646.2
+#since this is the size of the test data we will construct 
+#Replacement is true, we can sample the same number repetively
+idx <- sample(x = c(1:5), size = ceiling(nrow(data_cap) / 5), replace = TRUE)
+
+#We increase the first number by 0, second one by 5, 
+#next one by 10 and so on. This way we can directly 
+#obtain the corresponding rows out of the dataset
+idx <- (1:ceiling(nrow(data_cap) / 5) - 1) * 5 + idx
+
+#Computing the test and learning data 
+test <- data_cap[intersect(idx, 1:nrow(data_cap)), ]
+learn <- data_cap[setdiff(1:nrow(data_cap), idx), ]
+
+#Randomly order the test and learning data. 
+#This way, they are not ordered in decreasing order in function of the average claim amount
+learn <- learn[sample(1:nrow(learn)), ]
+test <- test[sample(1:nrow(test)), ]
+
+learn <- learn %>% mutate(Id=1:nrow(learn))
+test <- test %>% mutate(Id=1:nrow(test))
+#The empirical severity of learning and test data does not differ 
+#drastically. This is more or less the same.
+sum(learn$Claim)/sum(learn$NClaims)
+sum(test$Claim)/sum(test$NClaims)
+
+sum(learn$Claim)
+sum(test$Claim)
+
+#Computing the empirical frequency. We expect this to be more or less the same 
+#since we ordered in function of the decreasing average claim amount. 
+#Therefore, the policies for which there was no claim made and thus 
+#with 0 frequency are also in the last rows of the dataset. 
+
+sum(learn$NClaims)/sum(learn$Expo)
+sum(test$NClaims)/sum(test$Expo)
 
 
 

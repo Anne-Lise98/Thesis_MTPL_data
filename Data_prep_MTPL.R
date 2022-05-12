@@ -49,6 +49,10 @@ data$Sex <- as.factor(data$Sex)
 #Making sure that number of claims is integer 
 data$NClaims <- as.integer(data$NClaims)
 
+#Converting the numeric values for the claims into integer values 
+data$Claim <- as.integer(data$Claim)
+data$Avg_Claim <- as.integer(data$Avg_Claim)
+
 #Adding new variable indicating the region based on the postcode.
 #This variable will simplify the further process.
 PC_breaks <- c(1000,2000,3000,4000,5000,6000,7000,8000,9000,10000)
@@ -58,16 +62,38 @@ data <- data %>% mutate(region = cut(PC,breaks = PC_breaks, labels = c('1','2','
 #Adding new variable binning the exposure to simplify the plots. 
 Expo_breaks <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
 
-data <- data %>% mutate(Expo_bin = cut(Expo,breaks = Expo_breaks))
+data <- data %>% mutate(Expo_bin = cut(Expo,breaks = Expo_breaks, labels = c('1','2','3','4','5','6','7','8','9', '10')))
                                 
 #Adding the frequency 
 data <- data %>% mutate(freq = NClaims/Expo)
 
+#Analysing the dataset
+str(data)
+summary(data)
+data %>% arrange(desc(freq))
+
+#Censoring some variables to avoid distortion of the analysis. 
+#Motivation for the censoring is provided below, when analysing 
+#the variables. 
+#After the censoring, the dataset is ordered decreasing in function 
+#of the average claim amounts. 
 data_cap <- data %>% mutate(Ageph = pmin(Ageph,88), BM = pmin(BM,18),
                             Age_car = pmin(Age_car,25), Power = pmax(13,pmin(Power,125)))
 
-data_cap <- data_cap %>% arrange(desc(Avg_Claim))
-data_cap <- data_cap %>% mutate(Id=1:nrow(data_cap))
+#Two columns are added to the dataset. 
+#RandNN contains standard normally distributed random numbers
+#RandUN contains random numbers generated from a uniform distribution 
+#on the interval from - sqrt3 to sqrt3. 
+#Both vectors are normalized
+
+set.seed(seed)
+
+data_cap <- data_cap %>% mutate(
+  RandNN = rnorm(nrow(data_cap)),
+  RandNN = scale_no_attr(RandNN),
+  RandUN = runif(nrow(data_cap), min = -sqrt(3), max = sqrt(3)),
+  RandUN = scale_no_attr(RandUN)
+)
 
 ############ First inspection of the data #################
 
@@ -80,12 +106,21 @@ range(data$Ageph)
 #number of policies. There are very little policies 
 #for young and old drivers. 
 number_policies_Age <- ggplot(data) + geom_bar(aes(x = Ageph), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
-  labs(x = 'Age of policyholder', y = 'number of policies') + ggtitle('Policies per age category')
-
-number_policies_Age
+  labs(x = 'Age of policyholder', y = 'Number of policies') + ggtitle('Policies per age category')
 
 sum(data$Ageph < 20)/nrow(data)
-sum(data$Ageph >= 90)/nrow(data)
+sum(data$Ageph > 88)/nrow(data)
+
+#Histogram for the total exposure. Histogram looks like 
+#the histogram for the number of policies, which is intuitive.
+#As the number of policies for an age group increases
+#it is intuitive that the exposure will increase. 
+#Furthermore, most policyholders take out policies with 
+#exposure of one year.
+expo_age <- ggplot(data %>% group_by(Ageph) %>% summarise(totalexpo = sum(Expo)), aes(x = Ageph, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+  labs(x = 'Age of policyholder', y = 'Total exposure') + ggtitle('The total exposure per age category')
+
+grid.arrange(number_policies_Age, expo_age, ncol = 2)
 
 #Plotting histogram for the number of claims per age policyholder. 
 #Again, there are very little claims filed by young and old 
@@ -102,8 +137,6 @@ nclaims_age
 
 freq_age <- ggplot(data %>% group_by(Ageph) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Ageph, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Age of policyholder', y = 'Empirical frequency') + ggtitle('The empirical frequency per age category')
-
-freq_age
 
 #Looking at the data it is clear that these drivers have 
 #rather short exposure whilst regularly filing claims. 
@@ -124,7 +157,7 @@ sum(data$Ageph == 18)
 #since we expect older drivers to indeed be less safe 
 #than slightly younger drivers. From age 89 up to 95 
 #we observe a very low empirical frequency. Therefore
-#we will left-censor the age at age 88 -> making sure 
+#we will right-censor the age at age 88 -> making sure 
 #that this does not distort the model. 
 
 #The empirical severity given that there is a claim 
@@ -134,18 +167,7 @@ sum(data$Ageph == 18)
 sev_age <- ggplot(data %>% group_by(Ageph) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Ageph, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Age of policyholder', y = 'Empirical severity') + ggtitle('The empirical severity per age category')
 
-sev_age
-
-#Histogram for the total exposure. Histogram looks like 
-#the histogram for the number of policies, which is intuitive.
-#As the number of policies for an age group increases
-#it is intuitive that the exposure will increase. 
-#Furthermore, most policyholders take out policies with 
-#exposure of one year.
-expo_age <- ggplot(data %>% group_by(Ageph) %>% summarise(totalexpo = sum(Expo)), aes(x = Ageph, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
-  labs(x = 'Age of policyholder', y = 'Total Exposure') + ggtitle('The total exposure per age category')
-
-expo_age
+grid.arrange(freq_age, sev_age, ncol = 2)
 
 
 ################ 2. Coverage ##############
@@ -165,7 +187,7 @@ number_policies_Coverage
 expo_coverage <- ggplot(data %>% group_by(Coverage) %>% summarise(totalexpo = sum(Expo)), aes(x = Coverage, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Type of coverage', y = 'Total exposure') + ggtitle('The total exposure per coverage type')
 
-expo_coverage
+grid.arrange(number_policies_Coverage, expo_coverage,ncol = 2)
 
 #Number of claims per coverage type
 nclaims_coverage <- ggplot(data %>% group_by(Coverage) %>% summarise(totalclaims = sum(NClaims)), aes(x = Coverage, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
@@ -189,6 +211,15 @@ sev_coverage <- ggplot(data %>% group_by(Coverage) %>% summarise(sev = sum(Claim
 
 sev_coverage
 
+#Boxplot and empirical density function for claim amounts. 
+#Conditional on claim amount > 0.
+
+ggplot(data_claims, aes(y = log(Claim))) +
+  geom_boxplot() + facet_wrap(~Coverage) + labs(title = 'Boxplot for log(claims) per coverage type')
+
+ggplot(data_claims, aes(x = log(Claim), color = Coverage)) + geom_density() +
+  labs(title = "Empirical density of log(claim amounts)", x = "Logged claim amounts", y = "Empirical density")
+
 
 ################# 3. Fuel #############
 #Most drivers use gasoline as fuel, about 69% of the policyholders.
@@ -206,8 +237,6 @@ number_policies_fuel
 #This again looks similar to histogram for number of policies.
 expo_fuel <- ggplot(data %>% group_by(Fuel) %>% summarise(totalexpo = sum(Expo)), aes(x = Fuel, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Type of fuel', y = 'Total exposure') + ggtitle('The total exposure per fuel type')
-
-expo_fuel
 
 #Number of claims per fuel type
 nclaims_fuel <- ggplot(data %>% group_by(Fuel) %>% summarise(totalclaims = sum(NClaims)), aes(x = Fuel, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
@@ -232,6 +261,17 @@ sev_fuel
 
 #In general we expect diesel users to have more accidents at a lower cost
 #whilst gasoline users have less accidents, but these will on average, come at a higher cost.
+
+#Boxplot and empirical density function for claim amounts. 
+#Conditional on claim amount > 0.
+
+ggplot(data_claims, aes(y = log(Claim))) +
+  geom_boxplot() + facet_wrap(~Fuel) + labs(title = 'Boxplot for log(claims) per fuel type')
+
+ggplot(data_claims, aes(x = log(Claim), color = Fuel)) + geom_density() +
+  labs(title = "Empirical density of log(claim amounts)", x = "Logged claim amounts", y = "Empirical density")
+
+
 
 ################# 4. Use ######################
 #Most drivers use the car for private use, about 95% of the policyholders. 
@@ -282,6 +322,15 @@ sev_use
 #We expect the use of the car to not have a big impact on both the 
 #frequency as well as severity of the claims.
 
+#Boxplot and empirical density function for claim amounts. 
+#Conditional on claim amount > 0.
+
+ggplot(data_claims, aes(y = log(Claim))) +
+  geom_boxplot() + facet_wrap(~Use) + labs(title = 'Boxplot for log(claims) per usage')
+
+ggplot(data_claims, aes(x = log(Claim), color = Use)) + geom_density() +
+  labs(title = "Empirical density of log(claim amounts)", x = "Logged claim amounts", y = "Empirical density")
+
 
 ################### 5. Fleet ##################
 #Most drivers do not have a fleet insurance, about 96.8% of the policyholders. 
@@ -331,6 +380,16 @@ sev_fleet
 #We expect policyholders who do not hold a fleet insurance to have 
 #more frequent accidents and more severe accidents.
 
+#Boxplot and empirical density function for claim amounts. 
+#Conditional on claim amount > 0.
+
+ggplot(data_claims, aes(y = log(Claim))) +
+  geom_boxplot() + facet_wrap(~Fleet) + labs(title = 'Boxplot for log(claims) for fleet')
+
+ggplot(data_claims, aes(x = log(Claim), color = Fleet)) + geom_density() +
+  labs(title = "Empirical density of log(claim amounts)", x = "Logged claim amounts", y = "Empirical density")
+
+
 ################ 6. Sex ####################
 #Most policyholders are male, about 73.5% of the policyholders. 
 summary(data$Sex)
@@ -375,13 +434,19 @@ sev_sex <- ggplot(data %>% group_by(Sex) %>% summarise(sev = sum(Claim)/sum(NCla
 
 sev_sex
 
+#Boxplot and empirical density function for claim amounts. 
+#Conditional on claim amount > 0.
+
+ggplot(data_claims, aes(y = log(Claim))) +
+  geom_boxplot() + facet_wrap(~Sex) + labs(title = 'Boxplot for log(claims) per sex')
+
+ggplot(data_claims, aes(x = log(Claim), color = Sex)) + geom_density() +
+  labs(title = "Empirical density of log(claim amounts)", x = "Logged claim amounts", y = "Empirical density")
+
+
 ################ 7. Bonus Malus ############
 #The Bonus-malus level ranges from 0 to 22. 
 range(data$BM)
-
-#We will right-censor the bonus-malus level at 18. 
-#The reason for this is explained in the analysis of the severity. 
-data_cap <- data %>% mutate(BM = pmin(BM,18))
 
 #Number of policies per bonus malus level.
 #Clearly, there are a lot of policies with bonus-malus level equal to zero. 
@@ -391,16 +456,16 @@ data_cap <- data %>% mutate(BM = pmin(BM,18))
 number_policies_BM <- ggplot(data) + geom_bar(aes(x = BM), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
   labs(x = 'Bonus-malus level', y = 'Number of policies') + ggtitle('Policies per bonus-malus level')
 
-sum(data$BM > 15)/nrow(data)
-number_policies_BM
+sum(data$BM > 18)/nrow(data)
 
 #Total exposure per bonus malus level.
 #This again looks similar to histogram for number of policies.
 expo_BM <- ggplot(data %>% group_by(BM) %>% summarise(totalexpo = sum(Expo)), aes(x = BM, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Bonus-malus level', y = 'Total exposure') + ggtitle('The total exposure per bonus-malus level')
 
-expo_BM
 expo_BM_list <- data %>% group_by(BM) %>% summarise(totalexpo = sum(Expo))
+
+grid.arrange(number_policies_BM, expo_BM, ncol = 2)
 
 #Number of claims per bonus malus level
 nclaims_BM <- ggplot(data %>% group_by(BM) %>% summarise(totalclaims = sum(NClaims)), aes(x = BM, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
@@ -416,10 +481,10 @@ nclaims_BM
 #censored data remain similar.
 
 freq_BM <- ggplot(data %>% group_by(BM) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = BM, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
-  labs(x = 'Bonus-malus level', y = 'Empirical frequency') + ggtitle('The empirical frequency per bonus-malus level')
+  labs(x = 'Bonus-malus level', y = 'Empirical frequency') + ggtitle('The empirical frequency per BM level')
 
 freq_BM_cap <- ggplot(data_cap %>% group_by(BM) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = BM, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
-  labs(x = 'Bonus-malus level', y = 'Empirical frequency') + ggtitle('The empirical frequency per bonus-malus level - censored')
+  labs(x = 'Bonus-malus level', y = 'Empirical frequency') + ggtitle('The empirical frequency per BM level - censored')
 
 grid.arrange(freq_BM, freq_BM_cap, ncol = 2)
 
@@ -430,24 +495,19 @@ grid.arrange(freq_BM, freq_BM_cap, ncol = 2)
 #a claim amount of 407477 resulting into an extremely high severity 
 #for this group of drivers. To not distort the data analysis by 
 #this one extreme observation, we right-censored the data for BM at 18.
-
-
 sev_BM <- ggplot(data %>% group_by(BM) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = BM, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
-  labs(x = 'Bonus-malus level', y = 'Empirical severity') + ggtitle('The empirical severity per bonus-malus level')
+  labs(x = 'Bonus-malus level', y = 'Empirical severity') + ggtitle('The empirical severity per BM level')
 
 sev_BM_cap <- ggplot(data_cap %>% group_by(BM) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = BM, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
-  labs(x = 'Bonus-malus level', y = 'Empirical severity') + ggtitle('The empirical severity per bonus-malus level - censored')
+  labs(x = 'Bonus-malus level', y = 'Empirical severity') + ggtitle('The empirical severity per BM level - censored')
 
 sum(data$BM == 22)
  
-
 grid.arrange(sev_BM, sev_BM_cap, ncol = 2)
 
 ########## 8. Age car ###############
 range(data$Age_car)
 summary(data$Age_car)
-
-data_cap <- data_cap %>% mutate(Age_car = pmin(Age_car,25))
 
 #Number of policies per car age. 
 #Very few policies for cars that are older than 20 years, only 766. 
@@ -463,7 +523,7 @@ number_policies_AgeCar_datcap <- ggplot(data_cap) + geom_bar(aes(x = Age_car), c
   labs(x = 'Age of car', y = 'Number of policies') + ggtitle('Policies per car age - censored')
 
 number_policies_AgeCar_datcap
-sum(data$Age_car == 0)
+sum(data$Age_car == 0)/nrow(data)
 sum(data$Age_car > 25)
 sum(data$Age_car > 25)/nrow(data)
 
@@ -474,6 +534,7 @@ expo_AgeCar <- ggplot(data %>% group_by(Age_car) %>% summarise(totalexpo = sum(E
 
 expo_AgeCar
 
+grid.arrange(number_policies_AgeCar, expo_AgeCar, ncol = 2)
 
 
 #Number of claims per car age
@@ -491,8 +552,6 @@ nclaims_AgeCar
 freq_AgeCar <- ggplot(data %>% group_by(Age_car) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Age_car, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Age of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per car age')
 
-freq_AgeCar
-
 freq_AgeCar_col <- data %>% group_by(Age_car) %>% summarize(Freq = sum(NClaims) / sum(Expo))
 
 data %>% filter(Age_car == 37)
@@ -503,7 +562,7 @@ sum(data$Age_car > 25)
 freq_AgeCar_cap <- ggplot(data_cap %>% group_by(Age_car) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Age_car, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Age of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per car age - censored')
 
-freq_AgeCar_cap
+grid.arrange(freq_AgeCar, freq_AgeCar_cap, ncol = 2)
 #Observing the frequency we do not expect the age of the car to have a 
 #big impact on the frequency since this seems to be rather equal across 
 #the different ages. We note that for new cars (0-1 years old), we expect the frequency 
@@ -515,12 +574,11 @@ freq_AgeCar_cap
 sev_AgeCar <- ggplot(data %>% group_by(Age_car) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Age_car, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Age of car', y = 'Empirical severity') + ggtitle('The empirical severity per car age')
 
-sev_AgeCar
 
 sev_AgeCar_cap <- ggplot(data_cap %>% group_by(Age_car) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Age_car, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Age of car', y = 'Empirical severity') + ggtitle('The empirical severity per car age - censored')
 
-sev_AgeCar_cap
+grid.arrange(sev_AgeCar, sev_AgeCar_cap, ncol = 2)
 
 #The severity seems to vary across the different ages with no significant
 #outliers for the censored data. 
@@ -529,8 +587,6 @@ sev_AgeCar_cap
 #It is clear that the data is right-skewed when observing this in function 
 #of the power of the car.
 summary(data$Power)
-
-data_cap <- data_cap %>% mutate(Power =pmax(13, pmin(Power,125)))
 
 #Number of policies per power. 
 number_policies_Power <- ggplot(data) + geom_bar(aes(x = Power), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
@@ -544,7 +600,7 @@ sum(data$Power > 125)
 expo_Power <- ggplot(data %>% group_by(Power) %>% summarise(totalexpo = sum(Expo)), aes(x = Power, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Power of car', y = 'Total exposure') + ggtitle('The total exposure per power')
 
-expo_Power
+grid.arrange(number_policies_Power, expo_Power, ncol = 2)
 
 #Number of claims per power.
 nclaims_Power <- ggplot(data %>% group_by(Power) %>% summarise(totalclaims = sum(NClaims)), aes(x = Power, y = totalclaims)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
@@ -569,8 +625,7 @@ nclaims_Power
 freq_Power <- ggplot(data %>% group_by(Power) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Power, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Power of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per power')
 
-freq_Power
-
+data %>% filter(Power == 10)
 data %>% filter(Power == 152)
 
 data_power_count <- data %>% group_by(Power) %>% summarise(n = n())
@@ -579,7 +634,7 @@ sum(data$Power > 125)/nrow(data)
 freq_Power_cap <- ggplot(data_cap %>% group_by(Power) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Power, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Power of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per power - censored')
 
-freq_Power_cap
+grid.arrange(freq_Power, freq_Power_cap, ncol = 2)
 
 #For the censored data we observe an increasing trend in frequency in function 
 #of the power of the car, which is intuitive. 
@@ -591,12 +646,10 @@ freq_Power_cap
 sev_Power <- ggplot(data %>% group_by(Power) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Power, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Power of car', y = 'Empirical severity') + ggtitle('The empirical severity per power')
 
-sev_Power
-
 sev_Power_cap <- ggplot(data_cap %>% group_by(Power) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Power, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Power of car', y = 'Empirical severity') + ggtitle('The empirical severity per power - censored')
 
-sev_Power_cap
+grid.arrange(sev_Power, sev_Power_cap, ncol = 2)
 
 sev_Power_column <- data_cap %>% group_by(Power) %>% summarise(sev = sum(Claim)/sum(NClaims)) 
 
@@ -666,16 +719,16 @@ readShapefile = function(){
 }
 
 ##### (i) Exposure 
-expo_per_postal_code <- data %>% group_by(PC) %>% summarize(totalexpo = sum(Expo))
+expo_per_postal_code <- data_cap %>% group_by(PC) %>% summarize(totalexpo = sum(Expo))
 range(expo_per_postal_code$totalexpo)
 belgium_shape = readShapefile()
 belgium_shape@data <- left_join(belgium_shape@data,expo_per_postal_code, by = c('POSTCODE' = 'PC'))
 
-#We divide the empirical frequency across the municipalities in Belgium 
+#We divide the total exposure across the municipalities in Belgium 
 #in three bins: low, average and high.
 belgium_shape@data$expo_class <- cut(belgium_shape@data$totalexpo, breaks = quantile(belgium_shape@data$totalexpo, 
-                                                                                c(0,0.2,0.8,1),na.rm = TRUE),right = FALSE, include.lowest = TRUE)
-#Mapping the Belgium with the empirical frequencies 
+                                                                                c(0,0.2,0.8,1),na.rm = TRUE),right = FALSE, include.lowest = TRUE, labels = c('low','average','high'))
+#Mapping the Belgium with the total exposure bins
 belgium_shape_f <- fortify(belgium_shape)
 belgium_shape_f <- left_join(belgium_shape_f,belgium_shape@data)
 plot.eda.map <- ggplot(belgium_shape_f, aes(long,lat, group = group)) +
@@ -718,68 +771,67 @@ plot.eda.map <- plot.eda.map + theme_bw() + labs( fill = 'Empirical\nseverity') 
 plot.eda.map 
 
 ########### 12. General plots ##############
-summary(data$NClaims)
-hist_nclaims <- ggplot(data) + geom_bar(aes(x = NClaims), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+summary(data_cap$NClaims)
+hist_nclaims <- ggplot(data_cap) + geom_bar(aes(x = NClaims), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
   labs(x = 'Number of claims', y = 'Number of policies') + ggtitle('Policies per number of claims')
 
-hist_nclaims
-
-expo_nclaims <- ggplot(data %>% group_by(NClaims) %>% summarise(totalexpo = sum(Expo)), aes(x = NClaims, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
+expo_nclaims <- ggplot(data_cap %>% group_by(NClaims) %>% summarise(totalexpo = sum(Expo)), aes(x = NClaims, y = totalexpo)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
   labs(x = 'Number of claims', y = 'Total exposure') + ggtitle('The total exposure per number of claims')
 
-expo_nclaims
-range(data_cap$Expo)
+grid.arrange(hist_nclaims, expo_nclaims, ncol = 2)
 
 #The number of claims ranges from 0 up to 5. As expected, most policyholders
 #have zero claims with exposure and number of policies decreasing in function 
 #of the number of claims. 
 
-nclaims_table <- data %>% group_by(NClaims) %>% summarise(totalexposure = sum(Expo), n = n())
+sum(data_cap$NClaims == 0)/nrow(data_cap)
 
-hist_expo <- ggplot(data) + geom_bar(aes(x = Expo), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
-  labs(x = 'Exposure', y = 'number of policies') + ggtitle('Policies per exposure')
-hist_expo
+nclaims_table <- data_cap %>% group_by(NClaims) %>% summarise(totalexposure = sum(Expo), n = n())
 
-hist_expo_bin <- ggplot(data) + geom_bar(aes(x = Expo_bin), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
-  labs(x = 'Binned exposure', y = 'number of policies') + ggtitle('Policies per exposure - binned')
+hist_expo_bin <- ggplot(data_cap) + geom_bar(aes(x = Expo_bin), color = KULbg, fill = "blue", alpha = .5, stat = "count") + 
+  labs(x = 'Binned exposure', y = 'Number of policies') + ggtitle('Policies per exposure - binned')
 hist_expo_bin
+
+sum(data_cap$Expo == 1)/nrow(data_cap)
 
 #As expected most policies have an exposure of 1. Looking at the 
 #histogram for the binned exposures, the number of policies seems to be 
 #equal for the other bins. 
 
-summary(data$Claim)
-summary(data$Avg_Claim)
+summary(data_cap$Claim)
+summary(data_cap$Avg_Claim)
 
-#The claim amounts range from 0 up to 1.989.567,9
+#The claim amounts range from 0 up to 1.989.567
 #The average claim amounts have the same range. We conclude that 
 #this very big claim thus resulted out of 1 claim made by a policyholder.
 
-data_claims <- data %>% filter(Claim > 0)
+sum(data_cap$Claim == 0)/nrow(data_cap)
+data_claims <- data_cap %>% filter(Claim > 0)
 summary(data_claims$Claim)
 min(data_claims$Claim)
 
 data_claims <- data_claims %>% arrange(Claim)
+
 data_claims <- data_claims %>% mutate(Id=1:nrow(data_claims))
 
 #Conditioned upon observing a claim. 
 #Observing the policies resulting in a claim, it is clear that they also 
-#have a very wide range from 0.025 up to 1.989.567,9.
+#have a very wide range from  1 up to 1.989.567.
 #It is clear that this data is right skewed in function of the claims.
 
 p1 <- ggplot(data_claims, aes(x = log(Claim))) + geom_density(colour = "blue") +
-  labs(title = "Empirical density of log(claim amounts)", x = "claim amounts", y = "empirical density")
+  labs(title = "Empirical density of log(claim amounts)", x = "Claim amounts", y = "Empirical density")
 
 p2 <- ggplot(data_claims, aes(x = Claim^(1/3))) + geom_density(colour = "blue") +
-  labs(title = "Empirical density of claim amounts^(1/3)", x = "claim amounts", y = "empirical density")
+  labs(title = "Empirical density of claim amounts^(1/3)", x = "Claim amounts", y = "Empirical density")
 
 grid.arrange(p1, p2, ncol = 2)
 
 p1_avgclaim <- ggplot(data_claims, aes(x = log(Avg_Claim))) + geom_density(colour = "blue") +
-  labs(title = "Empirical density of log(average claim amounts)", x = "average claim amounts", y = "empirical density")
+  labs(title = "Empirical density of log(average claim amounts)", x = "Average claim amounts", y = "Empirical density")
 
 p2_avgclaim <- ggplot(data_claims, aes(x = Avg_Claim^(1/3))) + geom_density(colour = "blue") +
-  labs(title = "Empirical density of average claim amounts^(1/3)", x = "average claim amounts", y = "empirical density")
+  labs(title = "Empirical density of average claim amounts^(1/3)", x = "Average claim amounts", y = "Empirical density")
 
 grid.arrange(p1_avgclaim, p2_avgclaim, p1,p2, ncol = 2)
 
@@ -794,60 +846,18 @@ ggplot(data_claims, aes( y =Claim^(1/3))) +
 #the third quantile is 1443.9. Clearly, this will result in a lot of outliers
 #for the data. 
 
-############## Standardization of the data ##################
-
-summary(data_cap)
-data_cap <- data_cap %>% mutate(
- AgephNN = scale_no_attr(Ageph),
- FuelNN = as.integer(Fuel), 
- FuelNN = scale_no_attr(FuelNN), 
- UseNN = as.integer(Use), 
- UseNN = scale_no_attr(UseNN),
- FleetNN = as.integer(Fleet),
- FleetNN = scale_no_attr(FleetNN), 
- SexNN = as.integer(Sex), 
- SexNN = scale_no_attr(SexNN),
- BMNN = scale_no_attr(BM), 
- Age_carNN = scale_no_attr(Age_car), 
- PowerNN = scale_no_attr(Power)
- )
-
-
-#One-hot encoding for the categorical variables with more 
-#than 2 levels. In this setting, coverage and region are the only categorical 
-#variables with respectively 3 and 9 levels.
-#To model coverage we add 3 columns to the dataset. For region we add 9. 
-
-data_cap <- data_cap %>% preprocess_cat_onehot("Coverage", "Coverage")
-data_cap <- data_cap %>% preprocess_cat_onehot("region","region")
-
-str(data_cap)
-
-#Two columns are added to the dataset. 
-#RandNN contains standard normally distributed random numbers
-#RandUN contains random numbers generated from a uniform distribution 
-#on the interval from - sqrt3 to sqrt3. 
-#Both vectors are normalized
-
-set.seed(seed)
-
-data_cap <- data_cap %>% mutate(
-  RandNN = rnorm(nrow(data_cap)),
-  RandNN = scale_no_attr(RandNN),
-  RandUN = runif(nrow(data_cap), min = -sqrt(3), max = sqrt(3)),
-  RandUN = scale_no_attr(RandUN)
-)
-
 ################## Correlation study ###############
 
 sel_col <- c("Ageph","BM","Age_car","Power","Sex","Coverage","Fuel","Use","Fleet","region")
 
+#Computing a data set that only contains the covariates used in the models.
+#Converting categorical covariates into integers. 
 dat_tmp <- data_cap[, sel_col]
 dat_tmp <- dat_tmp %>% mutate(Sex = as.integer(Sex), Coverage = as.integer(Coverage),
                               Fuel = as.integer(Fuel), Use = as.integer(Use), Fleet = as.integer(Fleet), 
                               region = as.integer(region))
 
-
+#Computing the Pearson correlation matrix
 corrMat_Pearson <- round(cor(dat_tmp, method = "pearson"), 2)
 corrplot(corrMat_Pearson, method = "color")
 
@@ -858,7 +868,7 @@ corrplot(corrMat_Pearson, method = "color")
 #Indeed, we would expect younger cars to have a full coverage whilst 
 #older cars have a less extensive insurance such as TPL.
 
-
+#Computing the Spearman correlation matrix
 corrMat_Spearman <- round(cor(dat_tmp, method = "spearman"), 2)
 
 corrplot(corrMat_Spearman ,method = "color")
@@ -866,51 +876,79 @@ corrplot(corrMat_Spearman ,method = "color")
 #Very little correlation between the other variables. 
 
 ############# Training and testing data ############
-#METHOD 1: Straight-forward, looking at frequency only
-
+#Computing training and testing data using a 80/20 split.
 ind <- partition(y = data_cap[["NClaims"]], p = c(train = 0.8, test = 0.2), seed = seed)
-learn2 <- data_cap[ind$train,]
-test2 <- data_cap[ind$test,]
-range(learn2$NClaims)
-range(test2$NClaims)
+learn <- data_cap[ind$train,]
+test <- data_cap[ind$test,]
+range(learn$NClaims)
+range(test$NClaims)
 
-#METHOD 2: Taking into account the claim sizes 
-#Takes a sample out of the numbers 1 up to 5 of size 32646.2
-#since this is the size of the test data we will construct 
-#Replacement is true, we can sample the same number repetively
-idx <- sample(x = c(1:5), size = ceiling(nrow(data_cap) / 5), replace = TRUE)
-
-#We increase the first number by 0, second one by 5, 
-#next one by 10 and so on. This way we can directly 
-#obtain the corresponding rows out of the dataset
-idx <- (1:ceiling(nrow(data_cap) / 5) - 1) * 5 + idx
-
-#Computing the test and learning data 
-test <- data_cap[intersect(idx, 1:nrow(data_cap)), ]
-learn <- data_cap[setdiff(1:nrow(data_cap), idx), ]
-
-#Randomly order the test and learning data. 
-#This way, they are not ordered in decreasing order in function of the average claim amount
-learn <- learn[sample(1:nrow(learn)), ]
-test <- test[sample(1:nrow(test)), ]
-
+#Renaming the ID labels
 learn <- learn %>% mutate(Id=1:nrow(learn))
 test <- test %>% mutate(Id=1:nrow(test))
-#The empirical severity of learning and test data does not differ 
-#drastically. This is more or less the same.
+
+#Computing the empirical severity of both the training and testing data.
 sum(learn$Claim)/sum(learn$NClaims)
 sum(test$Claim)/sum(test$NClaims)
 
 sum(learn$Claim)
 sum(test$Claim)
 
-#Computing the empirical frequency. We expect this to be more or less the same 
-#since we ordered in function of the decreasing average claim amount. 
-#Therefore, the policies for which there was no claim made and thus 
-#with 0 frequency are also in the last rows of the dataset. 
-
+#The empirical frequency of the training and testing data. 
 sum(learn$NClaims)/sum(learn$Expo)
 sum(test$NClaims)/sum(test$Expo)
+
+#Empirical probabilities for the training and testing data. 
+freq_learn <- learn %>% group_by(NClaims) %>% summarise(n = n()/nrow(learn))
+freq_test <- test %>% group_by(NClaims) %>% summarise(n = n()/nrow(test))
+
+############## Standardization of the data ##################
+
+summary(learn)
+str(learn)
+summary(test)
+str(test)
+
+learn <- learn %>% mutate(
+  AgephNN = scale_no_attr(Ageph),
+  FuelNN = as.integer(Fuel), 
+  FuelNN = scale_no_attr(FuelNN), 
+  UseNN = as.integer(Use), 
+  UseNN = scale_no_attr(UseNN),
+  FleetNN = as.integer(Fleet),
+  FleetNN = scale_no_attr(FleetNN), 
+  SexNN = as.integer(Sex), 
+  SexNN = scale_no_attr(SexNN),
+  BMNN = scale_no_attr(BM), 
+  Age_carNN = scale_no_attr(Age_car), 
+  PowerNN = scale_no_attr(Power)
+)
+
+test <- test %>% mutate(
+  AgephNN = scale_no_attr(Ageph),
+  FuelNN = as.integer(Fuel), 
+  FuelNN = scale_no_attr(FuelNN), 
+  UseNN = as.integer(Use), 
+  UseNN = scale_no_attr(UseNN),
+  FleetNN = as.integer(Fleet),
+  FleetNN = scale_no_attr(FleetNN), 
+  SexNN = as.integer(Sex), 
+  SexNN = scale_no_attr(SexNN),
+  BMNN = scale_no_attr(BM), 
+  Age_carNN = scale_no_attr(Age_car), 
+  PowerNN = scale_no_attr(Power)
+)
+
+#One-hot encoding for the categorical variables with more 
+#than 2 levels. In this setting, coverage and region are the only categorical 
+#variables with respectively 3 and 9 levels.
+#To model coverage we add 3 columns to the dataset. For region we add 9. 
+
+learn <- learn %>% preprocess_cat_onehot("Coverage", "Coverage")
+learn <- learn %>% preprocess_cat_onehot("region","region")
+
+test <- test %>% preprocess_cat_onehot("Coverage", "Coverage")
+test <- test %>% preprocess_cat_onehot("region","region")
 
 
 

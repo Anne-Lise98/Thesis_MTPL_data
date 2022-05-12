@@ -1,22 +1,34 @@
+#Fitting a Poisson GLM for the learning data.
 glm1 <- glm(NClaims ~ Coverage + Fuel + Use + Fleet + Sex + Ageph + BM + Age_car 
             + Power + region, family = poisson(), data = learn, offset = log(Expo))
+
 summary(glm1)
 
-glm1$fitted.values
-max(glm1$fitted.values)
-min(glm1$fitted.values)
 
-glm3 <- glm(NClaims ~ Coverage + Fuel + Use + Fleet + Sex + Ageph + BM + Age_car 
-            + Power + region, family = poisson(), data = learn2, offset = log(Expo))
-summary(glm3)
-min(glm3$fitted.values)
+#Add the fitted mean values for all observations in the learning set to 
+#the learning data set.
+learn$glm <- glm1$fitted.values
 
-#Observation: the claim data was bimodal -> is using a glm for this possible? 
-#probably not since no of the models would give a good fit for this 
-learn_claims <- learn %>% filter(learn$Claim > 0)
-glm2 <- glm(Claim ~ Coverage + Fuel + Use + Fleet + Sex + Ageph + BM + Age_car 
-            + Power + region , family = Gamma(link = "inverse"), data = learn_claims)
-summary(glm2)
+#Using the glm model fitted on the learning data to obtain predictions 
+#for the number of claims for the testing data. 
+#We add these predictions to the testing data. 
+test$glm <- predict(glm1, newdata = test, type = "response")
+
+devianceloss_values <- data.frame(NULL)
+
+devianceloss_values[1,1] <- Poissondeviance(learn$NClaims,learn$glm)
+devianceloss_values[1,2] <- Poissondeviance(test$NClaims, test$glm)
+devianceloss_values[2,1] <- square_loss(learn$NClaims,learn$glm)
+devianceloss_values[2,2] <- square_loss(test$NClaims, test$glm)
+devianceloss_values[3,1] <- weighted_square_loss(learn$NClaims,learn$glm)
+devianceloss_values[3,2] <- weighted_square_loss(test$NClaims, test$glm)
+
+names(devianceloss_values) <- c('Learning','Testing')
+
+
+
+
+
 
 
 

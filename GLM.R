@@ -14,6 +14,7 @@ learn$glm <- glm1$fitted.values
 #We add these predictions to the testing data. 
 test$glm <- predict(glm1, newdata = test, type = "response")
 
+#Dataframe containing in-sample and out-of-sample losses
 devianceloss_values <- data.frame(NULL)
 
 devianceloss_values[1,1] <- Poissondeviance(learn$NClaims,learn$glm)

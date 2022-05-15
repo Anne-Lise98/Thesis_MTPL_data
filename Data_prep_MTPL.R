@@ -3,6 +3,10 @@ dir <- dirname(rstudioapi::getActiveDocumentContext()$path)
 setwd(dir)
 KULbg <- "#116E8A"
 
+#Installing tensorflow package
+install.packages("tensorflow")
+tensorflow::install_tensorflow(version = "2.6.2")
+
 #Loading the libraries
 library(keras)
 library(tensorflow)

@@ -23,7 +23,7 @@ GDMsteps <- data.frame(NULL)
 
 ######## Shallow neural networks ########
 q0 <- length(features) 
-q1 <- 20 
+q1 <- 25
 
 ###### 1. One GDM step per epoch #####
 # 1.1 Fitting a neural network evaluated on a validation set 
@@ -395,11 +395,11 @@ model_sh41 %>% compile(
   optimizer = "nadam"
 )
 
-#Fitting the model to the learning data. We consider 80 epochs, the optimal number of epochs.
+#Fitting the model to the learning data. We consider 50 epochs, the optimal number of epochs.
 #The batch size corresponds to fifty steps in each epoch. 
 fit41 <- model_sh41 %>% fit(
   list(Xlearn, as.matrix(log(learn$Expo))), as.matrix(learn$NClaims),
-  epochs = 80,
+  epochs = 50,
   batch_size = 2611, verbose = 1)
 
 plot(fit41)
@@ -652,13 +652,13 @@ model_dp1 %>% compile(
   optimizer = "nadam"
 )
 
-#Fitting the model to the learning data. We consider 300 epochs and batch size corresponding to fifty hundred steps in each 
+#Fitting the model to the learning data. We consider 300 epochs and batch size corresponding to hundred steps in each 
 #epoch. Validation data = 0.2 of the learning data.
 #Batch size chosen based on the analysis of the out-of-sample losses of the shallow networks
 fit_dp1 <- model_dp1 %>% fit(
   list(Xlearn, as.matrix(log(learn$Expo))), as.matrix(learn$NClaims),
   epochs = 300,
-  batch_size = 2611, validation_split = 0.2, verbose = 1)
+  batch_size = 1305, validation_split = 0.2, verbose = 1)
 
 plot(fit_dp1)
 
@@ -698,11 +698,12 @@ model_dp11 %>% compile(
 )
 
 #Fitting the model to the learning data. We consider 25 epochs, the optimal number of epochs.
-#The batch size corresponds to fifty steps in each epoch. 
+#The batch size corresponds to hundred steps in each epoch. 
 fit_dp11 <- model_dp11 %>% fit(
   list(Xlearn, as.matrix(log(learn$Expo))), as.matrix(learn$NClaims),
   epochs = 25,
-  batch_size = 2611, verbose = 1)
+  batch_size = 1305, verbose = 1)
+plot(fit_dp11)
 
 #Add the fitted data to the learning and testing data sets
 learn$fit_dp11 <- as.vector(model_dp11 %>% predict(list(Xlearn, as.matrix(log(learn$Expo)))))
@@ -715,8 +716,8 @@ for(i in 1:6){
 
 colnames(GDMsteps)[9] <- "Neural network specification" 
 
-GDMsteps[7,1] <- 50
-GDMsteps[7,2] <- 2611
+GDMsteps[7,1] <- 100
+GDMsteps[7,2] <- 1305
 GDMsteps[7,3] <- Poissondeviance(y_true = learn$NClaims, y_pred = learn$fit_dp1)
 GDMsteps[7,4] <- Poissondeviance(y_true = test$NClaims, y_pred = test$fit_dp1)
 GDMsteps[7,5] <- Poissondeviance(y_true = learn$NClaims, y_pred = learn$fit_dp11)
@@ -763,13 +764,13 @@ model_dp2 %>% compile(
   optimizer = "nadam"
 )
 summary(model_dp2)
-#Fitting the model to the learning data. We consider 300 epochs and batch size corresponding to fifty hundred steps in each 
+#Fitting the model to the learning data. We consider 300 epochs and batch size corresponding to hundred steps in each 
 #epoch. Validation data = 0.2 of the learning data.
 #Batch size chosen based on the analysis of the out-of-sample losses of the shallow networks
 fit_dp2 <- model_dp2 %>% fit(
   list(Xlearn, as.matrix(log(learn$Expo))), as.matrix(learn$NClaims),
   epochs = 300,
-  batch_size = 2611, validation_split = 0.2, verbose = 1)
+  batch_size = 1305, validation_split = 0.2, verbose = 1)
 
 plot(fit_dp2)
 
@@ -809,20 +810,21 @@ model_dp21 %>% compile(
   optimizer = "nadam"
 )
 
-#Fitting the model to the learning data. We consider 75 epochs, the optimal number of epochs.
-#The batch size corresponds to fifty steps in each epoch. 
+#Fitting the model to the learning data. We consider 25 epochs, the optimal number of epochs.
+#The batch size corresponds to hundred steps in each epoch. 
 fit_dp21 <- model_dp21 %>% fit(
   list(Xlearn, as.matrix(log(learn$Expo))), as.matrix(learn$NClaims),
-  epochs = 75,
-  batch_size = 2611, verbose = 1)
+  epochs = 25,
+  batch_size = 1305, verbose = 1)
+plot(fit_dp21)
 
 #Add the fitted data to the learning and testing data sets
 learn$fit_dp21 <- as.vector(model_dp21 %>% predict(list(Xlearn, as.matrix(log(learn$Expo)))))
 test$fit_dp21 <- as.vector(model_dp21 %>% predict(list(Xtest, as.matrix(log(test$Expo)))))
 
 
-GDMsteps[8,1] <- 50
-GDMsteps[8,2] <- 2611
+GDMsteps[8,1] <- 100
+GDMsteps[8,2] <- 1305
 GDMsteps[8,3] <- Poissondeviance(y_true = learn$NClaims, y_pred = learn$fit_dp2)
 GDMsteps[8,4] <- Poissondeviance(y_true = test$NClaims, y_pred = test$fit_dp2)
 GDMsteps[8,5] <- Poissondeviance(y_true = learn$NClaims, y_pred = learn$fit_dp21)
@@ -869,13 +871,13 @@ model_dp3 %>% compile(
   optimizer = "nadam"
 )
 summary(model_dp3)
-#Fitting the model to the learning data. We consider 300 epochs and batch size corresponding to fifty hundred steps in each 
+#Fitting the model to the learning data. We consider 300 epochs and batch size corresponding to hundred steps in each 
 #epoch. Validation data = 0.2 of the learning data.
 #Batch size chosen based on the analysis of the out-of-sample losses of the shallow networks
 fit_dp3 <- model_dp3 %>% fit(
   list(Xlearn, as.matrix(log(learn$Expo))), as.matrix(learn$NClaims),
   epochs = 300,
-  batch_size = 2611, validation_split = 0.2, verbose = 1)
+  batch_size = 1305, validation_split = 0.2, verbose = 1)
 
 plot(fit_dp3)
 
@@ -915,20 +917,20 @@ model_dp31 %>% compile(
   optimizer = "nadam"
 )
 
-#Fitting the model to the learning data. We consider 100 epochs, the optimal number of epochs.
-#The batch size corresponds to fifty steps in each epoch. 
+#Fitting the model to the learning data. We consider 30 epochs, the optimal number of epochs.
+#The batch size corresponds to hundred steps in each epoch. 
 fit_dp31 <- model_dp31 %>% fit(
   list(Xlearn, as.matrix(log(learn$Expo))), as.matrix(learn$NClaims),
-  epochs = 100,
-  batch_size = 2611, verbose = 1)
-
+  epochs = 30,
+  batch_size = 1305, verbose = 1)
+plot(fit_dp31)
 #Add the fitted data to the learning and testing data sets
 learn$fit_dp31 <- as.vector(model_dp31 %>% predict(list(Xlearn, as.matrix(log(learn$Expo)))))
 test$fit_dp31 <- as.vector(model_dp31 %>% predict(list(Xtest, as.matrix(log(test$Expo)))))
 
 
-GDMsteps[9,1] <- 50
-GDMsteps[9,2] <- 2611
+GDMsteps[9,1] <- 100
+GDMsteps[9,2] <- 1305
 GDMsteps[9,3] <- Poissondeviance(y_true = learn$NClaims, y_pred = learn$fit_dp3)
 GDMsteps[9,4] <- Poissondeviance(y_true = test$NClaims, y_pred = test$fit_dp3)
 GDMsteps[9,5] <- Poissondeviance(y_true = learn$NClaims, y_pred = learn$fit_dp31)

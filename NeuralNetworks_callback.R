@@ -511,13 +511,13 @@ cp_callback <- callback_model_checkpoint(
   verbose = 0
 )
 
-#Fitting the model to the learning data. We consider 300 epochs and batch size corresponding to hundred steps in each 
-#epoch. Validation data = 0.2 of the learning data.
+#Fitting the model to the learning data. We consider 200 epochs and batch size = 2611.
+#Validation data = 0.2 of the learning data.
 #Batch size chosen based on the analysis of the out-of-sample losses of the shallow networks
 fit_dp1 <- model_dp1 %>% fit(
   list(Xlearn, as.matrix(log(learn$Expo))), as.matrix(learn$NClaims),
-  epochs = 300,
-  batch_size = 1305, validation_split = 0.2, verbose = 1, callbacks = list(cp_callback))
+  epochs = 200,
+  batch_size = 2611, validation_split = 0.2, verbose = 1, callbacks = list(cp_callback))
 
 plot(fit_dp1)
 
@@ -546,6 +546,23 @@ GDMsteps[7,4] <- Poissondeviance(y_true = test$NClaims, y_pred = test$fit_dp1)
 GDMsteps[7,5] <- square_loss(y_true = learn$NClaims, y_pred = learn$fit_dp1)
 GDMsteps[7,6] <- square_loss(y_true = test$NClaims, y_pred = test$fit_dp1)
 GDMsteps[7,7] <- "Two layers - 10 - 20"
+
+#Plot the frequency estimated by the neural network for the test data (for each feature)
+p1 <- plot_freq(test, "Coverage", "frequency by coverage", "Neural network", "fit_dp1")
+p2 <- plot_freq(test, "Power", "frequency by power", "Neural network", "fit_dp1")
+p3 <- plot_freq(test, "Fuel", "frequency by fuel", "Neural network", "fit_dp1")
+p4 <- plot_freq(test, "Use", "frequency by use", "Neural network", "fit_dp1")
+grid.arrange(p1,p2,p3,p4)
+
+p5 <- plot_freq(test, "region", "frequency by region", "Neural network", "fit_dp1")
+p6 <- plot_freq(test, "Ageph", "frequency by age", "Neural network", "fit_dp1")
+p7 <- plot_freq(test, "Age_car", "frequency by age of car", "Neural network", "fit_dp1")
+p8 <- plot_freq(test, "BM", "frequency by BM", "Neural network", "fit_dp1")
+grid.arrange(p5,p6,p7,p8)
+
+p9 <- plot_freq(test, "Sex", "frequency by sex", "Neural network", "fit_dp1")
+p10 <- plot_freq(test, "Fleet", "frequency by fleet", "Neural network", "fit_dp1")
+grid.arrange(p9,p10)
 
 ####### 2. Neural network with 3 hidden layers ###### 
 q0 <- length(features)   # dimension of features
@@ -599,13 +616,13 @@ cp_callback <- callback_model_checkpoint(
   verbose = 0
 )
 
-#Fitting the model to the learning data. We consider 300 epochs and batch size corresponding to hundred steps in each 
-#epoch. Validation data = 0.2 of the learning data.
+#Fitting the model to the learning data. We consider 300 epochs and batch size = 2611.
+#Validation data = 0.2 of the learning data.
 #Batch size chosen based on the analysis of the out-of-sample losses of the shallow networks
 fit_dp2 <- model_dp2 %>% fit(
   list(Xlearn, as.matrix(log(learn$Expo))), as.matrix(learn$NClaims),
   epochs = 300,
-  batch_size = 1305, validation_split = 0.2, verbose = 1, callbacks = list(cp_callback))
+  batch_size = 2611, validation_split = 0.2, verbose = 1, callbacks = list(cp_callback))
 
 plot(fit_dp2)
 
@@ -679,13 +696,13 @@ cp_callback <- callback_model_checkpoint(
   verbose = 0
 )
 
-#Fitting the model to the learning data. We consider 300 epochs and batch size corresponding to hundred steps in each 
-#epoch. Validation data = 0.2 of the learning data.
+#Fitting the model to the learning data. We consider 200 epochs and batch size= 2611.
+#Validation data = 0.2 of the learning data.
 #Batch size chosen based on the analysis of the out-of-sample losses of the shallow networks
 fit_dp3 <- model_dp3 %>% fit(
   list(Xlearn, as.matrix(log(learn$Expo))), as.matrix(learn$NClaims),
-  epochs = 300,
-  batch_size = 1305, validation_split = 0.2, verbose = 1, callbacks = list(cp_callback))
+  epochs = 200,
+  batch_size = 2611, validation_split = 0.2, verbose = 1, callbacks = list(cp_callback))
 
 plot(fit_dp3)
 

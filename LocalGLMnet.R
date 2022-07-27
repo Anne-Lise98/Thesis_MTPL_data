@@ -773,6 +773,7 @@ GDMsteps_localglm[9,6] <- square_loss(y_true = test$NClaims, y_pred = test$fit_l
 GDMsteps_localglm[9,7] <- "One layer - 25"
 
 #### 5. Localglmnet: regression attentions with three hidden layers #####
+#### Batch size = 3000 ####
 q0 <- length(features)   # dimension of features
 q1 <- 25               # number of neurons in first hidden layer
 q2 <- 20                 # number of neurons in second hidden layer
@@ -856,5 +857,119 @@ GDMsteps_localglm[10,6] <- square_loss(y_true = test$NClaims, y_pred = test$fit_
 GDMsteps_localglm[10,7] <- "Three layers - 25 - 20 - 15"
 
 
+###### 6. Variable importance and selection ####
 
+#Defining a vector consisting of the features used in the localglmnet. 
+#In this case, we include the two random features RandNN and RandUN.
+col_features <- c("AgephNN", "FuelNN", "UseNN", "FleetNN", "SexNN", "BMNN", "Age_carNN", "PowerNN","Coverage1", "Coverage2", "Coverage3", "region1",
+                  "region2", "region3", "region4", "region5","region6", "region7", "region8", "region9", "RandNN", "RandUN") 
+
+col_names <- c("Ageph", "Fuel", "Use", "Fleet", "Sex", "BM", "Age_car", "Power","Coverage1", "Coverage2", "Coverage3", "region1",
+                  "region2", "region3", "region4", "region5","region6", "region7", "region8", "region9", "RandNN", "RandUN") 
+
+#Defining the number of neurons for the hidden layers. 
+q0 <- length(col_features)   # dimension of features
+q1 <- 10               # number of neurons in first hidden layer
+q2 <- 15                 # number of neurons in second hidden layer
+q3 <- 10                 # number of neurons in third hidden layer
+
+
+XX <- as.matrix(learn[, col_features])
+TT <- as.matrix(test[, col_features])
+
+#Defining the input layer consisting of the features 
+Design_localglm_selection <- layer_input(shape = c(q0), dtype = 'float32', name = 'Design') 
+
+#Defining the input layer consisting of the offset 
+LogVol_localglm_selection <- layer_input(shape = c(1), dtype = 'float32', name = 'LogVol')
+
+
+#Defining the neural network for the attentions. 
+#Clearly, the input dimension = output dimension
+Attention_localglm_selection <- Design_localglm_selection %>%
+  layer_dense(units = q1, activation = 'tanh', name = 'layer1') %>%
+  layer_dense(units = q2, activation = 'tanh', name = 'layer2') %>%
+  layer_dense(units = q3, activation = 'tanh', name = 'layer3') %>%
+  layer_dense(units = q0, activation = 'linear', name = 'attention')
+
+#Defining the layer containing the elementwise product of the attentions and features. 
+#Defining the initial value for the bias by the homogeneous model.
+Linear_localglm_selection <- list(Design_localglm_selection, Attention_localglm_selection) %>% layer_dot(name='product', axes=1) %>% layer_dense(units = 1,
+                                                                                                                         activation = 'linear', name = 'Input', weights = list(array(0, dim = c(1, 1)), array(log(lambda_hom), dim = c(1))))
+
+#We put the linear layer and the offset together. As the weights have been trained in the previous step, 
+#we do not train the weights here and fix bias == 0. 
+#Exponential activation function since we consider the Poisson regression model. 
+Response_localglm_selection <- list(Linear_localglm_selection, LogVol_localglm_selection) %>% layer_add(name = 'Add') %>% layer_dense(
+  units=1, activation='exponential', name='output', trainable = FALSE,
+  weights = list(array(1, dim = c(1, 1)), array(0, dim = c(1))))
+
+#Defining the model
+model_localglm_selection <- keras_model(inputs = c(Design_localglm_selection, LogVol_localglm_selection), outputs = c(Response_localglm_selection))
+model_localglm_selection %>% compile(
+  loss = 'poisson',
+  optimizer = "nadam"
+)
+
+summary(model_localglm_selection)
+
+#Define a path
+cp_path <- paste("./Networks/model_localglm_selection")
+
+#Define a callback to obtain the weights of the model that minimizes the validation loss. 
+#We only save the weights corresponding to the best model.
+cp_callback <- callback_model_checkpoint(
+  filepath = cp_path,
+  monitor = "val_loss",
+  save_weights_only = TRUE,
+  save_best_only = TRUE,
+  verbose = 0
+)
+
+#Fitting the model to the learning data. We consider 100 epochs and batch size = 1305.
+#Validation data = 0.2 of the learning data.
+#Callback included to obtain the weights corresponding to the best model (model that minimizes validation loss).
+fit_localglm_selection <- model_localglm_selection %>% fit(
+  list(XX, as.matrix(log(learn$Expo))), as.matrix(learn$NClaims),
+  epochs = 100,
+  batch_size = 1305, validation_split = 0.2, verbose = 1, callbacks = list(cp_callback))
+
+plot(fit_localglm_selection)
+
+#Plot validation loss and training loss, including line that indicates the minimum validation loss. 
+keras_plot_loss_min(fit_localglm_selection, seed)
+
+#Load the weights for the model corresponding to the smallest validation loss. 
+load_model_weights_hdf5(model_localglm_selection, cp_path)
+
+#Add the fitted data to the learning and testing data sets
+learn$fit_localglm_selection <- as.vector(model_localglm_selection %>% predict(list(XX, as.matrix(log(learn$Expo)))))
+test$fit_localglm_selection <- as.vector(model_localglm_selection %>% predict(list(TT, as.matrix(log(test$Expo)))))
+
+GDMsteps_localglm[11,1] <- 100
+GDMsteps_localglm[11,2] <- 1305
+GDMsteps_localglm[11,3] <- Poissondeviance(y_true = learn$NClaims, y_pred = learn$fit_localglm_selection)
+GDMsteps_localglm[11,4] <- Poissondeviance(y_true = test$NClaims, y_pred = test$fit_localglm_selection)
+GDMsteps_localglm[11,5] <- square_loss(y_true = learn$NClaims, y_pred = learn$fit_localglm_selection)
+GDMsteps_localglm[11,6] <- square_loss(y_true = test$NClaims, y_pred = test$fit_localglm_selection)
+GDMsteps_localglm[11,7] <- "Three layers - 10 - 15 - 10"
+
+#Selecting the submodel that only exists of the unweighted regression attentions
+zz <- keras_model(inputs = model_localglm_selection$input[[1]], outputs = get_layer(model_localglm_selection, 'attention')$output)
+summary(zz)
+
+#Computing the unweighted regression attentions on the testing data.
+beta_x <- data.frame(zz %>% predict(list(TT)))
+
+#Selecting the weight corresponding to the linear layer.
+ww <- as.numeric(get_weights(model_localglm_selection)[[9]])
+
+#Computing the real regression attentions for the testing data
+beta <- beta_x*ww 
+names(beta) <- paste("Beta",col_names)
+
+#Computing the regression attentions for the learning data 
+beta_xL <- data.frame(zz %>% predict(list(XX)))
+beta_L <- beta_xL*ww 
+names(beta_L) <- paste("Beta",col_names)
 

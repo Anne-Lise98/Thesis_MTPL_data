@@ -26,6 +26,33 @@ devianceloss_values[3,2] <- weighted_square_loss(test$NClaims, test$glm)
 
 names(devianceloss_values) <- c('Learning','Testing')
 
+#Variable selection based on the likelihood ratio test
+drop1(glm1, test = "LRT")
+
+#p-value for the model without respectively Sex and Age_car is > 0.05 so we fit GLM without these features 
+
+#Fitting a Poisson GLM for the learning data.
+glm2 <- glm(NClaims ~ Coverage + Fuel + Use + Fleet  + Ageph + BM
+            + Power + region, family = poisson(), data = learn, offset = log(Expo))
+
+summary(glm2)
+
+#Add the fitted mean values for all observations in the learning set to 
+#the learning data set.
+learn$glm2 <- glm2$fitted.values
+
+#Using the glm model fitted on the learning data to obtain predictions 
+#for the number of claims for the testing data. 
+#We add these predictions to the testing data. 
+test$glm2 <- predict(glm2, newdata = test, type = "response")
+
+devianceloss_values[1,3] <- Poissondeviance(learn$NClaims,learn$glm2)
+devianceloss_values[1,4] <- Poissondeviance(test$NClaims, test$glm2)
+devianceloss_values[2,3] <- square_loss(learn$NClaims,learn$glm2)
+devianceloss_values[2,4] <- square_loss(test$NClaims, test$glm2)
+devianceloss_values[3,3] <- weighted_square_loss(learn$NClaims,learn$glm2)
+devianceloss_values[3,4] <- weighted_square_loss(test$NClaims, test$glm2)
+
 #Plot the estimated frequency for the test data (for each feature)
 p1 <- plot_freq(test, "Coverage", "frequency by coverage", "GLM", "glm")
 p2 <- plot_freq(test, "Power", "frequency by power", "GLM", "glm")
@@ -42,6 +69,8 @@ grid.arrange(p5,p6,p7,p8)
 p9 <- plot_freq(test, "Sex", "frequency by sex", "GLM", "glm")
 p10 <- plot_freq(test, "Fleet", "frequency by fleet", "GLM", "glm")
 grid.arrange(p9,p10)
+
+
 
 
 

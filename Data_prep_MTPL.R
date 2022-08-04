@@ -59,9 +59,9 @@ data$Avg_Claim <- as.integer(data$Avg_Claim)
 
 #Adding new variable indicating the region based on the postcode.
 #This variable will simplify the further process.
-PC_breaks <- c(1000,2000,3000,4000,5000,6000,7000,8000,9000,10000)
+PC_breaks <- c(1000,1300,1500,2000,3000,3500,4000,5000,6000,6600,7000,8000,9000,10000)
 
-data <- data %>% mutate(region = cut(PC,breaks = PC_breaks, labels = c('1','2','3','4','5','6','7','8','9'),right = FALSE))
+data <- data %>% mutate(region = cut(PC,breaks = PC_breaks, labels = c('Brussels','Walloon Brabant','Flemish Brabant','Antwerp','Flemish Brabant','Limburg','Liege','Namur','Hainaut','Luxembourg','Hainaut','West Flanders', 'East Flanders'),right = FALSE))
 
 #Adding new variable binning the exposure to simplify the plots. 
 Expo_breaks <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
@@ -76,10 +76,10 @@ str(data)
 summary(data)
 data %>% arrange(desc(freq))
 
-#Censoring some variables to avoid distortion of the analysis. 
-#Motivation for the censoring is provided below, when analysing 
+#Capping some variables to avoid distortion of the analysis. 
+#Motivation for the capping is provided below, when analysing 
 #the variables. 
-#After the censoring, the dataset is ordered decreasing in function 
+#After the capping, the dataset is ordered decreasing in function 
 #of the average claim amounts. 
 data_cap <- data %>% mutate(Ageph = pmin(Ageph,88), BM = pmin(BM,18),
                             Age_car = pmin(Age_car,25), Power = pmax(13,pmin(Power,125)))
@@ -161,7 +161,7 @@ sum(data$Ageph == 18)
 #since we expect older drivers to indeed be less safe 
 #than slightly younger drivers. From age 89 up to 95 
 #we observe a very low empirical frequency. Therefore
-#we will right-censor the age at age 88 -> making sure 
+#we will cap the age at age 88 -> making sure 
 #that this does not distort the model. 
 
 #The empirical severity given that there is a claim 
@@ -215,15 +215,6 @@ sev_coverage <- ggplot(data %>% group_by(Coverage) %>% summarise(sev = sum(Claim
 
 sev_coverage
 
-#Boxplot and empirical density function for claim amounts. 
-#Conditional on claim amount > 0.
-
-ggplot(data_claims, aes(y = log(Claim))) +
-  geom_boxplot() + facet_wrap(~Coverage) + labs(title = 'Boxplot for log(claims) per coverage type')
-
-ggplot(data_claims, aes(x = log(Claim), color = Coverage)) + geom_density() +
-  labs(title = "Empirical density of log(claim amounts)", x = "Logged claim amounts", y = "Empirical density")
-
 
 ################# 3. Fuel #############
 #Most drivers use gasoline as fuel, about 69% of the policyholders.
@@ -265,16 +256,6 @@ sev_fuel
 
 #In general we expect diesel users to have more accidents at a lower cost
 #whilst gasoline users have less accidents, but these will on average, come at a higher cost.
-
-#Boxplot and empirical density function for claim amounts. 
-#Conditional on claim amount > 0.
-
-ggplot(data_claims, aes(y = log(Claim))) +
-  geom_boxplot() + facet_wrap(~Fuel) + labs(title = 'Boxplot for log(claims) per fuel type')
-
-ggplot(data_claims, aes(x = log(Claim), color = Fuel)) + geom_density() +
-  labs(title = "Empirical density of log(claim amounts)", x = "Logged claim amounts", y = "Empirical density")
-
 
 
 ################# 4. Use ######################
@@ -326,16 +307,6 @@ sev_use
 #We expect the use of the car to not have a big impact on both the 
 #frequency as well as severity of the claims.
 
-#Boxplot and empirical density function for claim amounts. 
-#Conditional on claim amount > 0.
-
-ggplot(data_claims, aes(y = log(Claim))) +
-  geom_boxplot() + facet_wrap(~Use) + labs(title = 'Boxplot for log(claims) per usage')
-
-ggplot(data_claims, aes(x = log(Claim), color = Use)) + geom_density() +
-  labs(title = "Empirical density of log(claim amounts)", x = "Logged claim amounts", y = "Empirical density")
-
-
 ################### 5. Fleet ##################
 #Most drivers do not have a fleet insurance, about 96.8% of the policyholders. 
 summary(data$Fleet)
@@ -384,15 +355,6 @@ sev_fleet
 #We expect policyholders who do not hold a fleet insurance to have 
 #more frequent accidents and more severe accidents.
 
-#Boxplot and empirical density function for claim amounts. 
-#Conditional on claim amount > 0.
-
-ggplot(data_claims, aes(y = log(Claim))) +
-  geom_boxplot() + facet_wrap(~Fleet) + labs(title = 'Boxplot for log(claims) for fleet')
-
-ggplot(data_claims, aes(x = log(Claim), color = Fleet)) + geom_density() +
-  labs(title = "Empirical density of log(claim amounts)", x = "Logged claim amounts", y = "Empirical density")
-
 
 ################ 6. Sex ####################
 #Most policyholders are male, about 73.5% of the policyholders. 
@@ -438,14 +400,6 @@ sev_sex <- ggplot(data %>% group_by(Sex) %>% summarise(sev = sum(Claim)/sum(NCla
 
 sev_sex
 
-#Boxplot and empirical density function for claim amounts. 
-#Conditional on claim amount > 0.
-
-ggplot(data_claims, aes(y = log(Claim))) +
-  geom_boxplot() + facet_wrap(~Sex) + labs(title = 'Boxplot for log(claims) per sex')
-
-ggplot(data_claims, aes(x = log(Claim), color = Sex)) + geom_density() +
-  labs(title = "Empirical density of log(claim amounts)", x = "Logged claim amounts", y = "Empirical density")
 
 
 ################ 7. Bonus Malus ############
@@ -488,7 +442,7 @@ freq_BM <- ggplot(data %>% group_by(BM) %>% summarize(Freq = sum(NClaims) / sum(
   labs(x = 'Bonus-malus level', y = 'Empirical frequency') + ggtitle('The empirical frequency per BM level')
 
 freq_BM_cap <- ggplot(data_cap %>% group_by(BM) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = BM, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
-  labs(x = 'Bonus-malus level', y = 'Empirical frequency') + ggtitle('The empirical frequency per BM level - censored')
+  labs(x = 'Bonus-malus level', y = 'Empirical frequency') + ggtitle('The empirical frequency per BM level - capped')
 
 grid.arrange(freq_BM, freq_BM_cap, ncol = 2)
 
@@ -503,7 +457,7 @@ sev_BM <- ggplot(data %>% group_by(BM) %>% summarise(sev = sum(Claim)/sum(NClaim
   labs(x = 'Bonus-malus level', y = 'Empirical severity') + ggtitle('The empirical severity per BM level')
 
 sev_BM_cap <- ggplot(data_cap %>% group_by(BM) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = BM, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
-  labs(x = 'Bonus-malus level', y = 'Empirical severity') + ggtitle('The empirical severity per BM level - censored')
+  labs(x = 'Bonus-malus level', y = 'Empirical severity') + ggtitle('The empirical severity per BM level - capped')
 
 sum(data$BM == 22)
  
@@ -564,7 +518,7 @@ sum(data$Age_car == 37)
 sum(data$Age_car > 25)
 
 freq_AgeCar_cap <- ggplot(data_cap %>% group_by(Age_car) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Age_car, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
-  labs(x = 'Age of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per car age - censored')
+  labs(x = 'Age of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per car age - capped')
 
 grid.arrange(freq_AgeCar, freq_AgeCar_cap, ncol = 2)
 #Observing the frequency we do not expect the age of the car to have a 
@@ -580,7 +534,7 @@ sev_AgeCar <- ggplot(data %>% group_by(Age_car) %>% summarise(sev = sum(Claim)/s
 
 
 sev_AgeCar_cap <- ggplot(data_cap %>% group_by(Age_car) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Age_car, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
-  labs(x = 'Age of car', y = 'Empirical severity') + ggtitle('The empirical severity per car age - censored')
+  labs(x = 'Age of car', y = 'Empirical severity') + ggtitle('The empirical severity per car age - capped')
 
 grid.arrange(sev_AgeCar, sev_AgeCar_cap, ncol = 2)
 
@@ -636,7 +590,7 @@ data_power_count <- data %>% group_by(Power) %>% summarise(n = n())
 sum(data$Power > 125)/nrow(data)
 
 freq_Power_cap <- ggplot(data_cap %>% group_by(Power) %>% summarize(Freq = sum(NClaims) / sum(Expo)),aes(x = Power, y = Freq))+ geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
-  labs(x = 'Power of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per power - censored')
+  labs(x = 'Power of car', y = 'Empirical frequency') + ggtitle('The empirical frequency per power - capped')
 
 grid.arrange(freq_Power, freq_Power_cap, ncol = 2)
 
@@ -651,7 +605,7 @@ sev_Power <- ggplot(data %>% group_by(Power) %>% summarise(sev = sum(Claim)/sum(
   labs(x = 'Power of car', y = 'Empirical severity') + ggtitle('The empirical severity per power')
 
 sev_Power_cap <- ggplot(data_cap %>% group_by(Power) %>% summarise(sev = sum(Claim)/sum(NClaims)), aes(x = Power, y = sev)) + geom_bar(stat = "identity",color = KULbg, fill = "blue", alpha = .5)+ 
-  labs(x = 'Power of car', y = 'Empirical severity') + ggtitle('The empirical severity per power - censored')
+  labs(x = 'Power of car', y = 'Empirical severity') + ggtitle('The empirical severity per power - capped')
 
 grid.arrange(sev_Power, sev_Power_cap, ncol = 2)
 
@@ -928,20 +882,24 @@ learn <- learn %>% mutate(
   PowerNN = scale_no_attr(Power)
 )
 
+
+
 test <- test %>% mutate(
-  AgephNN = scale_no_attr(Ageph),
+  AgephNN = (Ageph - mean(learn$Ageph, na.rm = TRUE))/sd(learn$Ageph, na.rm = TRUE),
   FuelNN = as.integer(Fuel), 
-  FuelNN = scale_no_attr(FuelNN), 
+  FuelNN = (FuelNN - mean(as.integer(learn$Fuel), na.rm = TRUE))/sd(as.integer(learn$Fuel), na.rm = TRUE), 
   UseNN = as.integer(Use), 
-  UseNN = scale_no_attr(UseNN),
+  UseNN = (UseNN - mean(as.integer(learn$Use), na.rm = TRUE))/sd(as.integer(learn$Use), na.rm = TRUE),
   FleetNN = as.integer(Fleet),
-  FleetNN = scale_no_attr(FleetNN), 
+  FleetNN = (FleetNN - mean(as.integer(learn$Fleet), na.rm = TRUE))/sd(as.integer(learn$Fleet), na.rm = TRUE), 
   SexNN = as.integer(Sex), 
-  SexNN = scale_no_attr(SexNN),
-  BMNN = scale_no_attr(BM), 
-  Age_carNN = scale_no_attr(Age_car), 
-  PowerNN = scale_no_attr(Power)
+  SexNN = (SexNN - mean(as.integer(learn$Sex), na.rm = TRUE))/sd(as.integer(learn$Sex), na.rm = TRUE),
+  BMNN = (BM - mean(learn$BM, na.rm = TRUE))/sd(learn$BM, na.rm = TRUE), 
+  Age_carNN = (Age_car - mean(learn$Age_car, na.rm = TRUE))/sd(learn$Age_car, na.rm = TRUE), 
+  PowerNN = (Power - mean(learn$Power, na.rm = TRUE))/sd(learn$Power, na.rm = TRUE)
 )
+
+
 
 #One-hot encoding for the categorical variables with more 
 #than 2 levels. In this setting, coverage and region are the only categorical 
